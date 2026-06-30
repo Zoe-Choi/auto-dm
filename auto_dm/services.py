@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from sqlite3 import Connection, IntegrityError, Row
@@ -26,6 +28,24 @@ def keyword_matches(keyword: str, text: str) -> bool:
     if not normalized:
         return False
     return normalized in text.casefold()
+
+
+def _oauth_state_hash(state: str) -> str:
+    return hashlib.sha256(state.encode("utf-8")).hexdigest()
+
+
+def create_oauth_state(conn: Connection) -> str:
+    state = secrets.token_urlsafe(24)
+    conn.execute("INSERT INTO oauth_states (state_hash) VALUES (?)", (_oauth_state_hash(state),))
+    return state
+
+
+def consume_oauth_state(conn: Connection, state: str) -> bool:
+    cursor = conn.execute(
+        "DELETE FROM oauth_states WHERE state_hash = ?",
+        (_oauth_state_hash(state),),
+    )
+    return cursor.rowcount == 1
 
 
 def upsert_automation(

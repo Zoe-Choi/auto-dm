@@ -22,6 +22,12 @@ CREATE TABLE IF NOT EXISTS instagram_accounts (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS oauth_states (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    state_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS instagram_media (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     instagram_media_id TEXT NOT NULL UNIQUE,
@@ -79,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status_next ON dm_jobs(status, next_attempt_
 CREATE INDEX IF NOT EXISTS idx_jobs_claim_token ON dm_jobs(claim_token);
 CREATE INDEX IF NOT EXISTS idx_automations_active_media ON automations(active, instagram_media_id);
 CREATE INDEX IF NOT EXISTS idx_media_timestamp ON instagram_media(timestamp);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_created ON oauth_states(created_at);
 """
 
 MIGRATIONS = [

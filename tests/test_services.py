@@ -7,6 +7,8 @@ from auto_dm.db import connect, init_db
 from auto_dm.services import (
     IncomingComment,
     claim_jobs,
+    consume_oauth_state,
+    create_oauth_state,
     dashboard_counts,
     delete_automation,
     keyword_matches,
@@ -251,6 +253,18 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(valid_meta_signature(payload, signature, "other-secret"))
         self.assertFalse(valid_meta_signature(payload, None, "app-secret"))
         self.assertTrue(valid_meta_signature(payload, None, ""))
+
+    def test_oauth_state_is_consumed_once(self) -> None:
+        with connect(self.db_path) as conn:
+            state = create_oauth_state(conn)
+            stored = conn.execute("SELECT state_hash FROM oauth_states").fetchone()
+            first = consume_oauth_state(conn, state)
+            second = consume_oauth_state(conn, state)
+
+        self.assertIsNotNone(stored)
+        self.assertNotEqual(stored["state_hash"], state)
+        self.assertTrue(first)
+        self.assertFalse(second)
 
     def test_dashboard_counts_reports_automation_media_and_jobs(self) -> None:
         with connect(self.db_path) as conn:

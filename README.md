@@ -99,6 +99,10 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 
 `META_APP_SECRET`이 설정되어 있으면 Instagram Webhook POST는 `X-Hub-Signature-256` HMAC signature를 검증합니다. Webhook GET 검증은 `META_VERIFY_TOKEN`을 사용합니다.
 
+## OAuth 보안
+
+Instagram 연결 callback은 one-time `state` 값을 검증하고 재사용을 막습니다.
+
 ## Windows 실행 스크립트
 
 집 PC에서는 repo를 pull한 뒤 `.env`를 만들고 아래 명령을 각각 다른 터미널에서 실행합니다.

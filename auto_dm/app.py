@@ -15,6 +15,8 @@ from .instagram import InstagramClient, MetaConfigError
 from .security import protect_secret, unprotect_secret
 from .services import (
     IncomingComment,
+    consume_oauth_state,
+    create_oauth_state,
     dashboard_counts,
     delete_automation,
     list_automations,
@@ -171,13 +173,19 @@ def retry_failed_jobs() -> RedirectResponse:
 @app.get("/auth/instagram", dependencies=admin_dependencies)
 def instagram_auth() -> RedirectResponse:
     try:
-        return RedirectResponse(InstagramClient().auth_url())
+        with connect() as conn:
+            state = create_oauth_state(conn)
+        return RedirectResponse(InstagramClient().auth_url(state=state))
     except MetaConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/auth/instagram/callback", dependencies=admin_dependencies)
-async def instagram_callback(code: str) -> RedirectResponse:
+async def instagram_callback(code: str, state: str) -> RedirectResponse:
+    with connect() as conn:
+        if not consume_oauth_state(conn, state):
+            raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
     client = InstagramClient()
     token = await client.exchange_code(code)
     access_token = token["access_token"]
