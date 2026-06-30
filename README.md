@@ -4,13 +4,14 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 
 ## 현재 구현
 
-- 게시물별 `media id`, 키워드, DM 내용, 활성 상태 관리
+- 게시물별 `media id`, 키워드, DM 내용, 활성 상태 생성/수정 관리
 - 게시물 자동화 삭제와 ON/OFF 전환
 - Instagram OAuth 연결 진입점
 - Instagram Webhook 검증과 댓글 수신 엔드포인트
 - 댓글 ID 기준 중복 처리 방지
 - SQLite WAL 기반 큐 저장
 - 실패 작업 backoff 재시도
+- `waiting_follow` 댓글을 팔로우 확인 후 최종 DM 발송 대기로 전환
 - PC와 모바일 폭에 맞춘 관리 화면
 
 ## 공식 API 제약
@@ -20,7 +21,7 @@ Meta 공식 API만 사용하면 다음 동작은 그대로 보장할 수 없습�
 - DM 버튼 한 번으로 사용자를 즉시 팔로우시키기
 - 임의 댓글 작성자가 현재 팔로워인지 실시간으로 확정 확인하기
 
-따라서 `follow_required`가 켜진 자동화는 먼저 follow 안내 private reply를 보내고 `waiting_follow` 상태로 남깁니다. 최종 DM 자동 발송은 공식적으로 검증 가능한 팔로워 확인 수단이 확보된 뒤 확장해야 합니다.
+따라서 `follow_required`가 켜진 자동화는 먼저 follow 안내 private reply를 보내고 `waiting_follow` 상태로 남깁니다. 관리자가 팔로우를 확인한 뒤 화면에서 `팔로우 확인`을 누르면 해당 댓글은 `ready_to_send`로 바뀌고 설정된 최종 DM 발송 대상이 됩니다. 완전 자동 팔로워 검증은 공식적으로 검증 가능한 수단이 확보된 뒤 확장해야 합니다.
 
 ## 설치
 

@@ -14,6 +14,7 @@ from .services import (
     delete_automation,
     list_automations,
     list_recent_comments,
+    mark_follow_confirmed,
     record_comment,
     upsert_automation,
 )
@@ -70,6 +71,30 @@ def create_automation(
     return RedirectResponse("/", status_code=303)
 
 
+@app.post("/automations/{automation_id}")
+def update_automation(
+    automation_id: int,
+    instagram_media_id: str = Form(...),
+    title: str = Form(...),
+    keyword: str = Form(...),
+    dm_message: str = Form(...),
+    follow_required: str | None = Form(None),
+    active: str | None = Form(None),
+) -> RedirectResponse:
+    with connect() as conn:
+        upsert_automation(
+            conn,
+            automation_id=automation_id,
+            instagram_media_id=instagram_media_id,
+            title=title,
+            keyword=keyword,
+            dm_message=dm_message,
+            follow_required=follow_required == "on",
+            active=active == "on",
+        )
+    return RedirectResponse("/", status_code=303)
+
+
 @app.post("/automations/{automation_id}/delete")
 def remove_automation(automation_id: int) -> RedirectResponse:
     with connect() as conn:
@@ -88,6 +113,15 @@ def toggle_automation(automation_id: int) -> RedirectResponse:
             """,
             (automation_id,),
         )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/comments/{comment_id}/confirm-follow")
+async def confirm_follow(comment_id: int) -> RedirectResponse:
+    with connect() as conn:
+        changed = mark_follow_confirmed(conn, comment_id)
+    if changed:
+        await process_jobs(limit=20)
     return RedirectResponse("/", status_code=303)
 
 
@@ -161,5 +195,3 @@ async def instagram_webhook(payload: dict) -> dict[str, str]:
 @app.post("/jobs/process")
 async def process_jobs_endpoint() -> dict[str, int]:
     return {"processed": await process_jobs(limit=50)}
-
-

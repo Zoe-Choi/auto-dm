@@ -25,7 +25,7 @@
       {% else %}
         <p class="status warn">Instagram 미연결</p>
       {% endif %}
-      <p class="note">비밀번호는 저장하지 않습니다. Meta OAuth로 발급된 access token만 로컬 DB에 저장됩니다.</p>
+      <p class="note">비밀번호는 저장하지 않습니다. Meta OAuth로 발급된 access token만 암호화해 로컬 DB에 저장합니다.</p>
     </section>
 
     <section class="panel editor">
@@ -59,36 +59,42 @@
       <div class="section-head">
         <h2>자동 DM 게시물</h2>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>상태</th>
-              <th>이름</th>
-              <th>media id</th>
-              <th>키워드</th>
-              <th>팔로우</th>
-              <th>작업</th>
-            </tr>
-          </thead>
-          <tbody>
-          {% for item in automations %}
-            <tr>
-              <td><span class="pill {{ 'on' if item.active else 'off' }}">{{ 'ON' if item.active else 'OFF' }}</span></td>
-              <td>{{ item.title }}</td>
-              <td class="mono">{{ item.instagram_media_id }}</td>
-              <td>{{ item.keyword }}</td>
-              <td>{{ '필수' if item.follow_required else '미사용' }}</td>
-              <td class="actions">
-                <form method="post" action="/automations/{{ item.id }}/toggle"><button class="button" type="submit">전환</button></form>
-                <form method="post" action="/automations/{{ item.id }}/delete"><button class="button danger" type="submit">삭제</button></form>
-              </td>
-            </tr>
-          {% else %}
-            <tr><td colspan="6" class="empty">등록된 게시물이 없습니다.</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
+      <div class="automation-list">
+        {% for item in automations %}
+          <article class="automation-card">
+            <form method="post" action="/automations/{{ item.id }}" class="form-grid compact">
+              <div class="card-title">
+                <span class="pill {{ 'on' if item.active else 'off' }}">{{ 'ON' if item.active else 'OFF' }}</span>
+                <strong>{{ item.title }}</strong>
+              </div>
+              <label>
+                게시물 media id
+                <input name="instagram_media_id" required value="{{ item.instagram_media_id }}">
+              </label>
+              <label>
+                관리 이름
+                <input name="title" required value="{{ item.title }}">
+              </label>
+              <label>
+                댓글 키워드
+                <input name="keyword" required value="{{ item.keyword }}">
+              </label>
+              <label class="wide">
+                발송 DM
+                <textarea name="dm_message" required rows="4">{{ item.dm_message }}</textarea>
+              </label>
+              <label class="check"><input type="checkbox" name="follow_required" {% if item.follow_required %}checked{% endif %}> 팔로워에게만 최종 DM 발송</label>
+              <label class="check"><input type="checkbox" name="active" {% if item.active %}checked{% endif %}> 자동 DM 켜기</label>
+              <button class="button primary wide" type="submit">저장</button>
+            </form>
+            <div class="actions">
+              <form method="post" action="/automations/{{ item.id }}/toggle"><button class="button" type="submit">ON/OFF</button></form>
+              <form method="post" action="/automations/{{ item.id }}/delete"><button class="button danger" type="submit">삭제</button></form>
+            </div>
+          </article>
+        {% else %}
+          <p class="empty">등록된 게시물이 없습니다.</p>
+        {% endfor %}
       </div>
     </section>
 
@@ -106,6 +112,7 @@
               <th>작성자</th>
               <th>댓글</th>
               <th>오류</th>
+              <th>작업</th>
             </tr>
           </thead>
           <tbody>
@@ -116,9 +123,18 @@
               <td>{{ item.commenter_username or item.commenter_id }}</td>
               <td>{{ item.text }}</td>
               <td>{{ item.error }}</td>
+              <td>
+                {% if item.status == 'waiting_follow' %}
+                  <form method="post" action="/comments/{{ item.id }}/confirm-follow">
+                    <button class="button" type="submit">팔로우 확인</button>
+                  </form>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
             </tr>
           {% else %}
-            <tr><td colspan="5" class="empty">처리된 댓글이 없습니다.</td></tr>
+            <tr><td colspan="6" class="empty">처리된 댓글이 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>

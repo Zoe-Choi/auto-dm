@@ -21,16 +21,16 @@ async def process_jobs(*, limit: int = 20, client: InstagramClient | None = None
         jobs = next_jobs(conn, limit=limit)
         for job in jobs:
             try:
-                if job["follow_required"]:
-                    await client.send_private_reply(
-                        job["instagram_comment_id"], FOLLOW_PROMPT, access_token
-                    )
-                    mark_job_waiting_follow(conn, job["id"], job["comment_id"])
-                else:
+                if job["status"] == "ready_to_send" or not job["follow_required"]:
                     await client.send_private_reply(
                         job["instagram_comment_id"], job["dm_message"], access_token
                     )
                     mark_job_sent(conn, job["id"], job["comment_id"])
+                else:
+                    await client.send_private_reply(
+                        job["instagram_comment_id"], FOLLOW_PROMPT, access_token
+                    )
+                    mark_job_waiting_follow(conn, job["id"], job["comment_id"])
                 processed += 1
             except Exception as exc:  # noqa: BLE001
                 retry_job(conn, job["id"], job["comment_id"], job["attempts"], str(exc))

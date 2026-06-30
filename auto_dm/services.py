@@ -152,7 +152,8 @@ def next_jobs(conn: Connection, limit: int = 20) -> list[Row]:
             FROM dm_jobs j
             JOIN comments c ON c.id = j.comment_id
             JOIN automations a ON a.id = c.automation_id
-            WHERE j.status = 'queued' AND j.next_attempt_at <= CURRENT_TIMESTAMP
+            WHERE j.status IN ('queued', 'ready_to_send')
+              AND j.next_attempt_at <= CURRENT_TIMESTAMP
             ORDER BY j.created_at ASC, j.id ASC
             LIMIT ?
             """,
@@ -167,7 +168,7 @@ def mark_job_sent(conn: Connection, job_id: int, comment_id: int) -> None:
         (job_id,),
     )
     conn.execute(
-        "UPDATE comments SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE comments SET status = 'sent', error = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (comment_id,),
     )
 
@@ -186,6 +187,29 @@ def mark_job_waiting_follow(conn: Connection, job_id: int, comment_id: int) -> N
         """,
         (comment_id,),
     )
+
+
+def mark_follow_confirmed(conn: Connection, comment_id: int) -> bool:
+    cursor = conn.execute(
+        """
+        UPDATE dm_jobs
+        SET status = 'ready_to_send', next_attempt_at = CURRENT_TIMESTAMP,
+            last_error = '', updated_at = CURRENT_TIMESTAMP
+        WHERE comment_id = ? AND status = 'waiting_follow'
+        """,
+        (comment_id,),
+    )
+    if cursor.rowcount == 0:
+        return False
+    conn.execute(
+        """
+        UPDATE comments
+        SET status = 'ready_to_send', error = '', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (comment_id,),
+    )
+    return True
 
 
 def retry_job(conn: Connection, job_id: int, comment_id: int, attempts: int, error: str) -> None:

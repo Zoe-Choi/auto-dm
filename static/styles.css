@@ -106,8 +106,12 @@ table { width: 100%; border-collapse: collapse; min-width: 720px; }
 th, td { padding: 10px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
 th { color: var(--muted); font-size: 13px; font-weight: 700; }
 .mono { font-family: Consolas, monospace; font-size: 13px; }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .actions form { margin: 0; }
+.automation-list { display: grid; gap: 12px; }
+.automation-card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.card-title { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+.compact { align-items: end; }
 .empty { color: var(--muted); text-align: center; }
 .pill {
   display: inline-flex;
