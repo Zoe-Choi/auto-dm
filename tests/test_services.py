@@ -9,11 +9,13 @@ from auto_dm.services import (
     delete_automation,
     keyword_matches,
     list_automations,
+    list_instagram_media,
     mark_follow_confirmed,
     mark_job_waiting_follow,
     next_jobs,
     record_comment,
     upsert_automation,
+    upsert_instagram_media,
 )
 
 
@@ -164,6 +166,46 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len(first_batch), 500)
         self.assertEqual(len(second_batch), 500)
         self.assertEqual(len(first_ids & second_ids), 0)
+
+    def test_upsert_instagram_media_keeps_latest_values(self) -> None:
+        with connect(self.db_path) as conn:
+            saved = upsert_instagram_media(
+                conn,
+                [
+                    {
+                        "id": "media-1",
+                        "caption": "first caption",
+                        "media_type": "IMAGE",
+                        "permalink": "https://example.com/1",
+                        "timestamp": "2026-06-30T00:00:00+0000",
+                    },
+                    {
+                        "id": "media-2",
+                        "caption": "second caption",
+                        "media_type": "VIDEO",
+                        "permalink": "https://example.com/2",
+                        "timestamp": "2026-06-29T00:00:00+0000",
+                    },
+                ],
+            )
+            upsert_instagram_media(
+                conn,
+                [
+                    {
+                        "id": "media-1",
+                        "caption": "updated caption",
+                        "media_type": "IMAGE",
+                        "permalink": "https://example.com/updated",
+                        "timestamp": "2026-06-30T00:00:00+0000",
+                    }
+                ],
+            )
+            media = list_instagram_media(conn)
+
+        self.assertEqual(saved, 2)
+        self.assertEqual(len(media), 2)
+        self.assertEqual(media[0]["instagram_media_id"], "media-1")
+        self.assertEqual(media[0]["caption"], "updated caption")
 
 
 if __name__ == "__main__":

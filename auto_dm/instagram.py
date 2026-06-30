@@ -54,16 +54,34 @@ class InstagramClient:
             response.raise_for_status()
             return response.json()
 
-    async def get_me(self, access_token: str) -> dict[str, Any]:
+    async def get_pages_with_instagram(self, access_token: str) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
                 f"{self.base_url}/me/accounts",
-                params={"access_token": access_token},
+                params={
+                    "access_token": access_token,
+                    "fields": "id,name,access_token,instagram_business_account{id,username}",
+                },
             )
             response.raise_for_status()
-            return response.json()
+            return response.json().get("data", [])
 
-    async def send_private_reply(self, comment_id: str, message: str, access_token: str) -> dict[str, Any]:
+    async def list_media(self, instagram_user_id: str, access_token: str) -> list[dict[str, Any]]:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"{self.base_url}/{instagram_user_id}/media",
+                params={
+                    "access_token": access_token,
+                    "fields": "id,caption,media_type,permalink,thumbnail_url,timestamp",
+                    "limit": 50,
+                },
+            )
+            response.raise_for_status()
+            return response.json().get("data", [])
+
+    async def send_private_reply(
+        self, comment_id: str, message: str, access_token: str
+    ) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
                 f"{self.base_url}/{comment_id}/private_replies",

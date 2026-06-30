@@ -5,6 +5,7 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 ## 현재 구현
 
 - 게시물별 `media id`, 키워드, DM 내용, 활성 상태 생성/수정 관리
+- 최근 Instagram 게시물 불러오기와 게시물별 자동화 추가
 - 게시물 자동화 삭제와 ON/OFF 전환
 - Instagram OAuth 연결 진입점
 - Instagram Webhook 검증과 댓글 수신 엔드포인트
@@ -64,6 +65,8 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 5. Verify token은 `.env`의 `META_VERIFY_TOKEN`과 같은 값으로 입력합니다.
 6. 필요한 권한은 `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`, `pages_show_list`, `pages_read_engagement`입니다.
 7. 앱 검수와 권한 승인이 끝난 뒤 `/auth/instagram`에서 연결합니다.
+8. 관리 화면에서 `게시물 불러오기`를 눌러 최근 media를 캐시합니다.
+9. 최근 게시물 카드에서 키워드와 DM 내용을 입력해 자동화를 추가합니다.
 
 ## 테스트
 
@@ -75,3 +78,7 @@ ruff check .
 ## Git 보안
 
 `.env`, SQLite DB, virtualenv, IDE 설정은 commit하지 않습니다.
+
+## 게시물 선택 흐름
+
+Instagram 계정은 Facebook Page에 연결된 Instagram Business/Creator 계정이어야 합니다. OAuth callback은 연결된 Page의 `instagram_business_account`와 Page access token을 저장합니다. `게시물 불러오기`는 최근 media를 로컬 DB에 캐시하고, 화면에서 게시물별 키워드와 DM을 바로 등록할 수 있게 합니다.

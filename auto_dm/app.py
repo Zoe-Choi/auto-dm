@@ -8,15 +8,17 @@ from fastapi.templating import Jinja2Templates
 from .config import settings
 from .db import connect, init_db
 from .instagram import InstagramClient, MetaConfigError
-from .security import protect_secret
+from .security import protect_secret, unprotect_secret
 from .services import (
     IncomingComment,
     delete_automation,
     list_automations,
+    list_instagram_media,
     list_recent_comments,
     mark_follow_confirmed,
     record_comment,
     upsert_automation,
+    upsert_instagram_media,
 )
 
 app = FastAPI(title="Auto DM")
@@ -33,6 +35,7 @@ def startup() -> None:
 def index(request: Request) -> HTMLResponse:
     with connect() as conn:
         automations = list_automations(conn)
+        media_items = list_instagram_media(conn)
         comments = list_recent_comments(conn)
         account = conn.execute(
             "SELECT * FROM instagram_accounts ORDER BY updated_at DESC, id DESC LIMIT 1"
@@ -42,6 +45,7 @@ def index(request: Request) -> HTMLResponse:
         {
             "request": request,
             "automations": automations,
+            "media_items": media_items,
             "comments": comments,
             "account": account,
         },
@@ -135,22 +139,52 @@ async def instagram_callback(code: str) -> RedirectResponse:
     client = InstagramClient()
     token = await client.exchange_code(code)
     access_token = token["access_token"]
-    profile = await client.get_me(access_token)
-    first = (profile.get("data") or [{}])[0]
-    instagram_user_id = str(first.get("id") or "connected")
-    username = str(first.get("name") or first.get("username") or "Instagram")
+    pages = await client.get_pages_with_instagram(access_token)
+    selected_page = next((page for page in pages if page.get("instagram_business_account")), None)
+    if not selected_page:
+        raise HTTPException(status_code=400, detail="No Instagram business account connected")
+
+    instagram_account = selected_page["instagram_business_account"]
+    page_access_token = str(selected_page.get("access_token") or access_token)
     with connect() as conn:
         conn.execute(
             """
-            INSERT INTO instagram_accounts (instagram_user_id, username, access_token)
-            VALUES (?, ?, ?)
+            INSERT INTO instagram_accounts (
+                instagram_user_id, username, access_token, page_id, page_access_token
+            ) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(instagram_user_id) DO UPDATE SET
                 username = excluded.username,
                 access_token = excluded.access_token,
+                page_id = excluded.page_id,
+                page_access_token = excluded.page_access_token,
                 updated_at = CURRENT_TIMESTAMP
             """,
-            (instagram_user_id, username, protect_secret(access_token)),
+            (
+                str(instagram_account.get("id") or ""),
+                str(instagram_account.get("username") or selected_page.get("name") or "Instagram"),
+                protect_secret(access_token),
+                str(selected_page.get("id") or ""),
+                protect_secret(page_access_token),
+            ),
         )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/media/sync")
+async def sync_media() -> RedirectResponse:
+    with connect() as conn:
+        account = conn.execute(
+            "SELECT * FROM instagram_accounts ORDER BY updated_at DESC, id DESC LIMIT 1"
+        ).fetchone()
+    if not account:
+        return RedirectResponse("/", status_code=303)
+
+    token = account["page_access_token"] or account["access_token"]
+    media = await InstagramClient().list_media(
+        account["instagram_user_id"], unprotect_secret(token)
+    )
+    with connect() as conn:
+        upsert_instagram_media(conn, media)
     return RedirectResponse("/", status_code=303)
 
 

@@ -17,7 +17,8 @@ async def process_jobs(*, limit: int = 20, client: InstagramClient | None = None
         ).fetchone()
         if not account:
             return 0
-        access_token = unprotect_secret(account["access_token"])
+        token = account["page_access_token"] or account["access_token"]
+        access_token = unprotect_secret(token)
         jobs = claim_jobs(conn, limit=limit)
         for job in jobs:
             try:

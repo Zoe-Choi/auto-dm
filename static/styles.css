@@ -136,3 +136,9 @@ th { color: var(--muted); font-size: 13px; font-weight: 700; }
   .button { width: 100%; }
   table { min-width: 640px; }
 }
+.media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.media-card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 12px; }
+.media-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.media-meta a { color: var(--primary); text-decoration: none; font-size: 14px; }
+.caption { color: var(--text); line-height: 1.4; max-height: 4.2em; overflow: hidden; }
+@media (max-width: 760px) { .media-grid { grid-template-columns: 1fr; } }

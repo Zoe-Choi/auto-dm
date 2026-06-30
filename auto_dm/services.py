@@ -80,6 +80,50 @@ def upsert_automation(
 def delete_automation(conn: Connection, automation_id: int) -> None:
     conn.execute("DELETE FROM automations WHERE id = ?", (automation_id,))
 
+def upsert_instagram_media(conn: Connection, media_items: list[dict]) -> int:
+    saved = 0
+    for item in media_items:
+        media_id = str(item.get("id") or "").strip()
+        if not media_id:
+            continue
+        conn.execute(
+            """
+            INSERT INTO instagram_media (
+                instagram_media_id, caption, media_type, permalink, thumbnail_url, timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(instagram_media_id) DO UPDATE SET
+                caption = excluded.caption,
+                media_type = excluded.media_type,
+                permalink = excluded.permalink,
+                thumbnail_url = excluded.thumbnail_url,
+                timestamp = excluded.timestamp,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                media_id,
+                str(item.get("caption") or ""),
+                str(item.get("media_type") or ""),
+                str(item.get("permalink") or ""),
+                str(item.get("thumbnail_url") or ""),
+                str(item.get("timestamp") or ""),
+            ),
+        )
+        saved += 1
+    return saved
+
+
+def list_instagram_media(conn: Connection, limit: int = 20) -> list[Row]:
+    return list(
+        conn.execute(
+            """
+            SELECT *
+            FROM instagram_media
+            ORDER BY timestamp DESC, updated_at DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+    )
 
 def list_automations(conn: Connection) -> list[Row]:
     return list(conn.execute("SELECT * FROM automations ORDER BY created_at DESC, id DESC"))

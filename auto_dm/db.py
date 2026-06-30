@@ -16,6 +16,20 @@ CREATE TABLE IF NOT EXISTS instagram_accounts (
     instagram_user_id TEXT NOT NULL UNIQUE,
     username TEXT NOT NULL,
     access_token TEXT NOT NULL,
+    page_id TEXT NOT NULL DEFAULT '',
+    page_access_token TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS instagram_media (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    instagram_media_id TEXT NOT NULL UNIQUE,
+    caption TEXT NOT NULL DEFAULT '',
+    media_type TEXT NOT NULL DEFAULT '',
+    permalink TEXT NOT NULL DEFAULT '',
+    thumbnail_url TEXT NOT NULL DEFAULT '',
+    timestamp TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -64,10 +78,13 @@ CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_status_next ON dm_jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_claim_token ON dm_jobs(claim_token);
 CREATE INDEX IF NOT EXISTS idx_automations_active_media ON automations(active, instagram_media_id);
+CREATE INDEX IF NOT EXISTS idx_media_timestamp ON instagram_media(timestamp);
 """
 
 MIGRATIONS = [
     "ALTER TABLE dm_jobs ADD COLUMN claim_token TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE instagram_accounts ADD COLUMN page_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE instagram_accounts ADD COLUMN page_access_token TEXT NOT NULL DEFAULT ''",
 ]
 
 
