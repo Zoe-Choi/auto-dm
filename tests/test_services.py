@@ -18,6 +18,7 @@ from auto_dm.services import (
     upsert_automation,
     upsert_instagram_media,
 )
+from auto_dm.webhook import meta_signature, valid_meta_signature
 
 
 class ServiceTests(unittest.TestCase):
@@ -237,5 +238,14 @@ class ServiceTests(unittest.TestCase):
                 expected_password_hash=password_hash,
             )
         )
+
+    def test_meta_webhook_signature_validation(self) -> None:
+        payload = b'{"entry": []}'
+        signature = meta_signature(payload, "app-secret")
+
+        self.assertTrue(valid_meta_signature(payload, signature, "app-secret"))
+        self.assertFalse(valid_meta_signature(payload, signature, "other-secret"))
+        self.assertFalse(valid_meta_signature(payload, None, "app-secret"))
+        self.assertTrue(valid_meta_signature(payload, None, ""))
 if __name__ == "__main__":
     unittest.main()

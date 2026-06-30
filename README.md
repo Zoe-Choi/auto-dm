@@ -94,3 +94,7 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 ```
 
 출력된 hash를 `ADMIN_PASSWORD_HASH`에 넣습니다. 비밀번호 원문은 git에 올리지 않습니다.
+
+## Webhook 보안
+
+`META_APP_SECRET`이 설정되어 있으면 Instagram Webhook POST는 `X-Hub-Signature-256` HMAC signature를 검증합니다. Webhook GET 검증은 `META_VERIFY_TOKEN`을 사용합니다.

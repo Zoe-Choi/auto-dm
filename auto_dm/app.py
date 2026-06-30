@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +24,7 @@ from .services import (
     upsert_automation,
     upsert_instagram_media,
 )
+from .webhook import valid_meta_signature
 
 app = FastAPI(title="Auto DM")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -222,7 +225,13 @@ def verify_webhook(
 
 
 @app.post("/webhooks/instagram")
-async def instagram_webhook(payload: dict) -> dict[str, str]:
+async def instagram_webhook(request: Request) -> dict[str, str]:
+    body = await request.body()
+    signature = request.headers.get("x-hub-signature-256")
+    if not valid_meta_signature(body, signature, settings.meta_app_secret):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    payload = json.loads(body or b"{}")
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
