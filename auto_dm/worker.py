@@ -3,7 +3,7 @@ from __future__ import annotations
 from .db import connect
 from .instagram import InstagramClient
 from .security import unprotect_secret
-from .services import claim_jobs, mark_job_sent, mark_job_waiting_follow, retry_job
+from .services import claim_jobs, mark_job_sent, mark_job_waiting_follow, reset_stale_processing_jobs, retry_job
 
 FOLLOW_PROMPT = "Please follow this account and leave the keyword comment again. We will send the DM after confirmation."
 
@@ -19,6 +19,7 @@ async def process_jobs(*, limit: int = 20, client: InstagramClient | None = None
             return 0
         token = account["page_access_token"] or account["access_token"]
         access_token = unprotect_secret(token)
+        reset_stale_processing_jobs(conn)
         jobs = claim_jobs(conn, limit=limit)
         for job in jobs:
             try:

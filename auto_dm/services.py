@@ -208,6 +208,19 @@ def next_jobs(conn: Connection, limit: int = 20) -> list[Row]:
     )
 
 
+
+
+def reset_stale_processing_jobs(conn: Connection, *, stale_minutes: int = 15) -> int:
+    cursor = conn.execute(
+        """
+        UPDATE dm_jobs
+        SET status = 'queued', claim_token = '', updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'processing'
+          AND updated_at <= datetime(CURRENT_TIMESTAMP, ?)
+        """,
+        (f"-{stale_minutes} minutes",),
+    )
+    return int(cursor.rowcount)
 def claim_jobs(conn: Connection, limit: int = 20) -> list[Row]:
     token = uuid4().hex
     conn.execute(

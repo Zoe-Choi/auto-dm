@@ -16,6 +16,7 @@ from auto_dm.services import (
     mark_job_waiting_follow,
     next_jobs,
     record_comment,
+    reset_stale_processing_jobs,
     upsert_automation,
     upsert_instagram_media,
 )
@@ -270,5 +271,36 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(counts["media"], 1)
         self.assertEqual(counts["comments"], 1)
         self.assertEqual(counts["jobs_queued"], 1)
+
+    def test_reset_stale_processing_jobs_requeues_only_old_claims(self) -> None:
+        with connect(self.db_path) as conn:
+            self.add_automation(conn)
+            for i in range(2):
+                record_comment(
+                    conn,
+                    IncomingComment(
+                        comment_id=f"stale-comment-{i}",
+                        media_id="media-1",
+                        commenter_id=f"stale-user-{i}",
+                        commenter_username="tester",
+                        text="info please",
+                    ),
+                )
+            claimed = claim_jobs(conn, limit=2)
+            old_job_id = claimed[0]["id"]
+            new_job_id = claimed[1]["id"]
+            conn.execute(
+                "UPDATE dm_jobs SET updated_at = datetime(CURRENT_TIMESTAMP, '-20 minutes') WHERE id = ?",
+                (old_job_id,),
+            )
+            reset_count = reset_stale_processing_jobs(conn, stale_minutes=15)
+            rows = conn.execute(
+                "SELECT id, status FROM dm_jobs WHERE id IN (?, ?) ORDER BY id",
+                (old_job_id, new_job_id),
+            ).fetchall()
+
+        self.assertEqual(reset_count, 1)
+        self.assertEqual(rows[0]["status"], "queued")
+        self.assertEqual(rows[1]["status"], "processing")
 if __name__ == "__main__":
     unittest.main()

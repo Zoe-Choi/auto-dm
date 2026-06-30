@@ -117,3 +117,8 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 ## 운영 상태 패널
 
 첫 화면에서 관리자 인증, Meta 설정값 여부, Instagram 연결 상태, 활성 자동화 수, 게시물 캐시 수, DM job 상태를 확인할 수 있습니다. 값 자체는 노출하지 않고 설정 여부만 표시합니다.
+
+
+## Queue 복구
+
+worker가 job 처리 중 종료되면 `processing` job이 남을 수 있습니다. worker는 새 batch를 claim하기 전에 15분 이상 멈춘 stale processing job을 다시 `queued`로 돌립니다.
