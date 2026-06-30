@@ -1,9 +1,12 @@
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from auto_dm.admin import hash_admin_password, valid_admin_credentials
+from auto_dm.config import Settings
 from auto_dm.db import connect, init_db
+from auto_dm.instagram import InstagramClient
 from auto_dm.services import (
     IncomingComment,
     claim_jobs,
@@ -265,6 +268,19 @@ class ServiceTests(unittest.TestCase):
         self.assertNotEqual(stored["state_hash"], state)
         self.assertTrue(first)
         self.assertFalse(second)
+
+    def test_instagram_auth_url_includes_oauth_state(self) -> None:
+        client = InstagramClient(
+            Settings(
+                meta_app_id="app-id",
+                meta_redirect_uri="https://example.com/auth/instagram/callback",
+            )
+        )
+        query = parse_qs(urlparse(client.auth_url(state="state-1")).query)
+
+        self.assertEqual(query["client_id"], ["app-id"])
+        self.assertEqual(query["redirect_uri"], ["https://example.com/auth/instagram/callback"])
+        self.assertEqual(query["state"], ["state-1"])
 
     def test_dashboard_counts_reports_automation_media_and_jobs(self) -> None:
         with connect(self.db_path) as conn:

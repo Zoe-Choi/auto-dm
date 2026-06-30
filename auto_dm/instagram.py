@@ -4,8 +4,6 @@ import secrets
 from typing import Any
 from urllib.parse import urlencode
 
-import httpx
-
 from .config import Settings, settings
 
 AUTH_SCOPES = [
@@ -41,6 +39,8 @@ class InstagramClient:
     async def exchange_code(self, code: str) -> dict[str, Any]:
         if not self.config.meta_app_id or not self.config.meta_app_secret:
             raise MetaConfigError("META_APP_ID and META_APP_SECRET are required")
+        import httpx
+
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
                 f"{self.base_url}/oauth/access_token",
@@ -55,6 +55,8 @@ class InstagramClient:
             return response.json()
 
     async def get_pages_with_instagram(self, access_token: str) -> list[dict[str, Any]]:
+        import httpx
+
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
                 f"{self.base_url}/me/accounts",
@@ -67,6 +69,8 @@ class InstagramClient:
             return response.json().get("data", [])
 
     async def list_media(self, instagram_user_id: str, access_token: str) -> list[dict[str, Any]]:
+        import httpx
+
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
                 f"{self.base_url}/{instagram_user_id}/media",
@@ -82,6 +86,8 @@ class InstagramClient:
     async def send_private_reply(
         self, comment_id: str, message: str, access_token: str
     ) -> dict[str, Any]:
+        import httpx
+
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
                 f"{self.base_url}/{comment_id}/private_replies",
