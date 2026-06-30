@@ -23,3 +23,6 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
+
+[project.scripts]
+auto-dm = 'auto_dm.cli:main'

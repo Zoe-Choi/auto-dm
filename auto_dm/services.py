@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from sqlite3 import Connection, IntegrityError, Row
+from uuid import uuid4
 
 MAX_ATTEMPTS = 5
 
@@ -148,7 +149,8 @@ def next_jobs(conn: Connection, limit: int = 20) -> list[Row]:
     return list(
         conn.execute(
             """
-            SELECT j.*, c.instagram_comment_id, c.commenter_username, a.dm_message, a.follow_required
+            SELECT j.*, c.instagram_comment_id, c.commenter_username, c.status AS comment_status,
+                   a.dm_message, a.follow_required
             FROM dm_jobs j
             JOIN comments c ON c.id = j.comment_id
             JOIN automations a ON a.id = c.automation_id
@@ -162,9 +164,46 @@ def next_jobs(conn: Connection, limit: int = 20) -> list[Row]:
     )
 
 
+def claim_jobs(conn: Connection, limit: int = 20) -> list[Row]:
+    token = uuid4().hex
+    conn.execute(
+        """
+        UPDATE dm_jobs
+        SET status = 'processing', claim_token = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (
+            SELECT id
+            FROM dm_jobs
+            WHERE status IN ('queued', 'ready_to_send')
+              AND next_attempt_at <= CURRENT_TIMESTAMP
+            ORDER BY created_at ASC, id ASC
+            LIMIT ?
+        )
+        """,
+        (token, limit),
+    )
+    return list(
+        conn.execute(
+            """
+            SELECT j.*, c.instagram_comment_id, c.commenter_username, c.status AS comment_status,
+                   a.dm_message, a.follow_required
+            FROM dm_jobs j
+            JOIN comments c ON c.id = j.comment_id
+            JOIN automations a ON a.id = c.automation_id
+            WHERE j.claim_token = ? AND j.status = 'processing'
+            ORDER BY j.created_at ASC, j.id ASC
+            """,
+            (token,),
+        )
+    )
+
+
 def mark_job_sent(conn: Connection, job_id: int, comment_id: int) -> None:
     conn.execute(
-        "UPDATE dm_jobs SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        """
+        UPDATE dm_jobs
+        SET status = 'sent', claim_token = '', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
         (job_id,),
     )
     conn.execute(
@@ -175,7 +214,11 @@ def mark_job_sent(conn: Connection, job_id: int, comment_id: int) -> None:
 
 def mark_job_waiting_follow(conn: Connection, job_id: int, comment_id: int) -> None:
     conn.execute(
-        "UPDATE dm_jobs SET status = 'waiting_follow', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        """
+        UPDATE dm_jobs
+        SET status = 'waiting_follow', claim_token = '', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
         (job_id,),
     )
     conn.execute(
@@ -194,7 +237,7 @@ def mark_follow_confirmed(conn: Connection, comment_id: int) -> bool:
         """
         UPDATE dm_jobs
         SET status = 'ready_to_send', next_attempt_at = CURRENT_TIMESTAMP,
-            last_error = '', updated_at = CURRENT_TIMESTAMP
+            claim_token = '', last_error = '', updated_at = CURRENT_TIMESTAMP
         WHERE comment_id = ? AND status = 'waiting_follow'
         """,
         (comment_id,),
@@ -218,8 +261,8 @@ def retry_job(conn: Connection, job_id: int, comment_id: int, attempts: int, err
     conn.execute(
         """
         UPDATE dm_jobs
-        SET status = ?, attempts = attempts + 1, next_attempt_at = ?, last_error = ?,
-            updated_at = CURRENT_TIMESTAMP
+        SET status = ?, attempts = attempts + 1, next_attempt_at = ?, claim_token = '',
+            last_error = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
         """,
         (next_status, next_time.strftime("%Y-%m-%d %H:%M:%S"), error[:500], job_id),

@@ -10,6 +10,7 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 - Instagram Webhook 검증과 댓글 수신 엔드포인트
 - 댓글 ID 기준 중복 처리 방지
 - SQLite WAL 기반 큐 저장
+- worker claim token으로 중복 batch 처리 방지
 - 실패 작업 backoff 재시도
 - `waiting_follow` 댓글을 팔로우 확인 후 최종 DM 발송 대기로 전환
 - PC와 모바일 폭에 맞춘 관리 화면

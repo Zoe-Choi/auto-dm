@@ -18,7 +18,6 @@ from .services import (
     record_comment,
     upsert_automation,
 )
-from .worker import process_jobs
 
 app = FastAPI(title="Auto DM")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -117,11 +116,9 @@ def toggle_automation(automation_id: int) -> RedirectResponse:
 
 
 @app.post("/comments/{comment_id}/confirm-follow")
-async def confirm_follow(comment_id: int) -> RedirectResponse:
+def confirm_follow(comment_id: int) -> RedirectResponse:
     with connect() as conn:
-        changed = mark_follow_confirmed(conn, comment_id)
-    if changed:
-        await process_jobs(limit=20)
+        mark_follow_confirmed(conn, comment_id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -188,10 +185,4 @@ async def instagram_webhook(payload: dict) -> dict[str, str]:
             )
             with connect() as conn:
                 record_comment(conn, incoming)
-    await process_jobs(limit=20)
-    return {"status": "ok"}
-
-
-@app.post("/jobs/process")
-async def process_jobs_endpoint() -> dict[str, int]:
-    return {"processed": await process_jobs(limit=50)}
+    return {"status": "queued"}

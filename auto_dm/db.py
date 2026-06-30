@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS dm_jobs (
     status TEXT NOT NULL DEFAULT 'queued',
     attempts INTEGER NOT NULL DEFAULT 0,
     next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    claim_token TEXT NOT NULL DEFAULT '',
     last_error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -61,8 +62,13 @@ CREATE TABLE IF NOT EXISTS dm_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_status_next ON dm_jobs(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_claim_token ON dm_jobs(claim_token);
 CREATE INDEX IF NOT EXISTS idx_automations_active_media ON automations(active, instagram_media_id);
 """
+
+MIGRATIONS = [
+    "ALTER TABLE dm_jobs ADD COLUMN claim_token TEXT NOT NULL DEFAULT ''",
+]
 
 
 @contextmanager
@@ -81,3 +87,9 @@ def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
 def init_db(db_path: Path | None = None) -> None:
     with connect(db_path) as conn:
         conn.executescript(SCHEMA)
+        for sql in MIGRATIONS:
+            try:
+                conn.execute(sql)
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc).lower():
+                    raise
