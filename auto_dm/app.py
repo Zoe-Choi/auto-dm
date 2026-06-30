@@ -22,6 +22,7 @@ from .services import (
     list_recent_comments,
     mark_follow_confirmed,
     record_comment,
+    requeue_failed_jobs,
     upsert_automation,
     upsert_instagram_media,
 )
@@ -161,6 +162,12 @@ def confirm_follow(comment_id: int) -> RedirectResponse:
     return RedirectResponse("/", status_code=303)
 
 
+
+@app.post("/jobs/requeue-failed", dependencies=admin_dependencies)
+def retry_failed_jobs() -> RedirectResponse:
+    with connect() as conn:
+        requeue_failed_jobs(conn)
+    return RedirectResponse("/", status_code=303)
 @app.get("/auth/instagram", dependencies=admin_dependencies)
 def instagram_auth() -> RedirectResponse:
     try:

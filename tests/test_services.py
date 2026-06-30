@@ -16,7 +16,9 @@ from auto_dm.services import (
     mark_job_waiting_follow,
     next_jobs,
     record_comment,
+    requeue_failed_jobs,
     reset_stale_processing_jobs,
+    retry_job,
     upsert_automation,
     upsert_instagram_media,
 )
@@ -302,5 +304,34 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(reset_count, 1)
         self.assertEqual(rows[0]["status"], "queued")
         self.assertEqual(rows[1]["status"], "processing")
+
+    def test_requeue_failed_jobs_resets_attempts_and_errors(self) -> None:
+        with connect(self.db_path) as conn:
+            self.add_automation(conn)
+            comment = record_comment(
+                conn,
+                IncomingComment(
+                    comment_id="failed-comment",
+                    media_id="media-1",
+                    commenter_id="failed-user",
+                    commenter_username="tester",
+                    text="info please",
+                ),
+            )
+            job = next_jobs(conn)[0]
+            retry_job(conn, job["id"], comment["id"], 4, "token expired")
+            count = requeue_failed_jobs(conn)
+            row = conn.execute(
+                "SELECT j.status, j.attempts, j.last_error, c.status AS comment_status, c.error "
+                "FROM dm_jobs j JOIN comments c ON c.id = j.comment_id WHERE j.id = ?",
+                (job["id"],),
+            ).fetchone()
+
+        self.assertEqual(count, 1)
+        self.assertEqual(row["status"], "queued")
+        self.assertEqual(row["attempts"], 0)
+        self.assertEqual(row["last_error"], "")
+        self.assertEqual(row["comment_status"], "queued")
+        self.assertEqual(row["error"], "")
 if __name__ == "__main__":
     unittest.main()

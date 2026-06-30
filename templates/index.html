@@ -31,6 +31,7 @@
         <div><span>불러온 게시물</span><strong>{{ counts.media or 0 }}</strong></div>
         <div><span>대기 job</span><strong>{{ counts.jobs_queued or 0 }}</strong></div>
         <div><span>처리 실패</span><strong>{{ counts.jobs_failed or 0 }}</strong></div>
+        <form method="post" action="/jobs/requeue-failed" class="status-action"><button class="button" type="submit">실패 재시도</button></form>
       </div>
       <ul class="check-list">
         <li class="{{ 'ok' if config_status.admin_auth else 'warn' }}">관리자 인증 {{ '설정됨' if config_status.admin_auth else '미설정' }}</li>

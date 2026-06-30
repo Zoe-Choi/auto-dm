@@ -151,3 +151,6 @@ th { color: var(--muted); font-size: 13px; font-weight: 700; }
 .check-list li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; position: absolute; left: 0; top: 7px; background: var(--muted); }
 .check-list li.ok::before { background: var(--ok); }
 .check-list li.warn::before { background: var(--warn); }
+
+.status-action { grid-column: 1 / -1; }
+.status-action .button { width: 100%; }

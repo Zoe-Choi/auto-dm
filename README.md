@@ -122,3 +122,8 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 ## Queue 복구
 
 worker가 job 처리 중 종료되면 `processing` job이 남을 수 있습니다. worker는 새 batch를 claim하기 전에 15분 이상 멈춘 stale processing job을 다시 `queued`로 돌립니다.
+
+
+## 실패 job 재시도
+
+토큰/권한 문제를 해결한 뒤 관리 화면의 `실패 재시도` 버튼으로 `failed` job을 다시 `queued`로 돌릴 수 있습니다.

@@ -312,6 +312,26 @@ def mark_follow_confirmed(conn: Connection, comment_id: int) -> bool:
     return True
 
 
+
+
+def requeue_failed_jobs(conn: Connection) -> int:
+    cursor = conn.execute(
+        """
+        UPDATE dm_jobs
+        SET status = 'queued', attempts = 0, next_attempt_at = CURRENT_TIMESTAMP,
+            claim_token = '', last_error = '', updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'failed'
+        """
+    )
+    conn.execute(
+        """
+        UPDATE comments
+        SET status = 'queued', error = '', updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (SELECT comment_id FROM dm_jobs WHERE status = 'queued')
+          AND status = 'failed'
+        """
+    )
+    return int(cursor.rowcount)
 def retry_job(conn: Connection, job_id: int, comment_id: int, attempts: int, error: str) -> None:
     next_status = "failed" if attempts + 1 >= MAX_ATTEMPTS else "queued"
     next_time = datetime.now(timezone.utc) + timedelta(minutes=min(30, 2 ** attempts))
