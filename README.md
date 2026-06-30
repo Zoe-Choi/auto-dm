@@ -98,3 +98,18 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 ## Webhook 보안
 
 `META_APP_SECRET`이 설정되어 있으면 Instagram Webhook POST는 `X-Hub-Signature-256` HMAC signature를 검증합니다. Webhook GET 검증은 `META_VERIFY_TOKEN`을 사용합니다.
+
+## Windows 실행 스크립트
+
+집 PC에서는 repo를 pull한 뒤 `.env`를 만들고 아래 명령을 각각 다른 터미널에서 실행합니다.
+
+```powershell
+.\scripts\run-web.ps1
+.\scripts\run-worker.ps1
+```
+
+관리자 비밀번호 hash는 다음 명령으로 생성합니다.
+
+```powershell
+.\scripts\hash-admin-password.ps1 -Password "원하는 관리자 비밀번호"
+```
