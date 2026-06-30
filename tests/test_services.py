@@ -333,5 +333,27 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(row["last_error"], "")
         self.assertEqual(row["comment_status"], "queued")
         self.assertEqual(row["error"], "")
+
+    def test_create_automation_with_same_media_updates_existing_row(self) -> None:
+        with connect(self.db_path) as conn:
+            first_id = self.add_automation(conn, follow_required=True)
+            second_id = upsert_automation(
+                conn,
+                instagram_media_id="media-1",
+                title="updated reel",
+                keyword="price",
+                dm_message="updated message",
+                follow_required=False,
+                active=False,
+            )
+            rows = list_automations(conn)
+
+        self.assertEqual(first_id, second_id)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "updated reel")
+        self.assertEqual(rows[0]["keyword"], "price")
+        self.assertEqual(rows[0]["dm_message"], "updated message")
+        self.assertEqual(rows[0]["follow_required"], 0)
+        self.assertEqual(rows[0]["active"], 0)
 if __name__ == "__main__":
     unittest.main()

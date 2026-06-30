@@ -64,17 +64,28 @@ def upsert_automation(
         )
         return automation_id
 
-    cursor = conn.execute(
+    conn.execute(
         """
         INSERT INTO automations (
             instagram_media_id, title, keyword, dm_message, follow_required, active
         ) VALUES (
             :instagram_media_id, :title, :keyword, :dm_message, :follow_required, :active
         )
+        ON CONFLICT(instagram_media_id) DO UPDATE SET
+            title = excluded.title,
+            keyword = excluded.keyword,
+            dm_message = excluded.dm_message,
+            follow_required = excluded.follow_required,
+            active = excluded.active,
+            updated_at = CURRENT_TIMESTAMP
         """,
         values,
     )
-    return int(cursor.lastrowid)
+    row = conn.execute(
+        "SELECT id FROM automations WHERE instagram_media_id = ?",
+        (values["instagram_media_id"],),
+    ).fetchone()
+    return int(row["id"])
 
 
 def delete_automation(conn: Connection, automation_id: int) -> None:
