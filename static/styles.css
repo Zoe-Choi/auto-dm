@@ -142,3 +142,12 @@ th { color: var(--muted); font-size: 13px; font-weight: 700; }
 .media-meta a { color: var(--primary); text-decoration: none; font-size: 14px; }
 .caption { color: var(--text); line-height: 1.4; max-height: 4.2em; overflow: hidden; }
 @media (max-width: 760px) { .media-grid { grid-template-columns: 1fr; } }
+.status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.status-grid div { border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+.status-grid span { display: block; color: var(--muted); font-size: 12px; }
+.status-grid strong { display: block; margin-top: 4px; font-size: 20px; }
+.check-list { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.check-list li { padding-left: 16px; position: relative; color: var(--muted); }
+.check-list li::before { content: ""; width: 7px; height: 7px; border-radius: 50%; position: absolute; left: 0; top: 7px; background: var(--muted); }
+.check-list li.ok::before { background: var(--ok); }
+.check-list li.warn::before { background: var(--warn); }

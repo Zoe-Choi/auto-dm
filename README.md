@@ -113,3 +113,7 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 ```powershell
 .\scripts\hash-admin-password.ps1 -Password "원하는 관리자 비밀번호"
 ```
+
+## 운영 상태 패널
+
+첫 화면에서 관리자 인증, Meta 설정값 여부, Instagram 연결 상태, 활성 자동화 수, 게시물 캐시 수, DM job 상태를 확인할 수 있습니다. 값 자체는 노출하지 않고 설정 여부만 표시합니다.

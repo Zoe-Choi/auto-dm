@@ -15,6 +15,7 @@ from .instagram import InstagramClient, MetaConfigError
 from .security import protect_secret, unprotect_secret
 from .services import (
     IncomingComment,
+    dashboard_counts,
     delete_automation,
     list_automations,
     list_instagram_media,
@@ -65,6 +66,7 @@ def index(request: Request) -> HTMLResponse:
         account = conn.execute(
             "SELECT * FROM instagram_accounts ORDER BY updated_at DESC, id DESC LIMIT 1"
         ).fetchone()
+        counts = dashboard_counts(conn)
     return templates.TemplateResponse(
         "index.html",
         {
@@ -73,6 +75,14 @@ def index(request: Request) -> HTMLResponse:
             "media_items": media_items,
             "comments": comments,
             "account": account,
+            "counts": counts,
+            "config_status": {
+                "app_base_url": bool(settings.app_base_url),
+                "admin_auth": bool(settings.admin_password_hash),
+                "meta_app_id": bool(settings.meta_app_id),
+                "meta_app_secret": bool(settings.meta_app_secret),
+                "meta_verify_token": bool(settings.meta_verify_token),
+            },
         },
     )
 
@@ -201,6 +211,7 @@ async def sync_media() -> RedirectResponse:
         account = conn.execute(
             "SELECT * FROM instagram_accounts ORDER BY updated_at DESC, id DESC LIMIT 1"
         ).fetchone()
+        counts = dashboard_counts(conn)
     if not account:
         return RedirectResponse("/", status_code=303)
 

@@ -7,6 +7,7 @@ from auto_dm.db import connect, init_db
 from auto_dm.services import (
     IncomingComment,
     claim_jobs,
+    dashboard_counts,
     delete_automation,
     keyword_matches,
     list_automations,
@@ -247,5 +248,27 @@ class ServiceTests(unittest.TestCase):
         self.assertFalse(valid_meta_signature(payload, signature, "other-secret"))
         self.assertFalse(valid_meta_signature(payload, None, "app-secret"))
         self.assertTrue(valid_meta_signature(payload, None, ""))
+
+    def test_dashboard_counts_reports_automation_media_and_jobs(self) -> None:
+        with connect(self.db_path) as conn:
+            self.add_automation(conn)
+            upsert_instagram_media(conn, [{"id": "media-1", "timestamp": "2026-06-30"}])
+            record_comment(
+                conn,
+                IncomingComment(
+                    comment_id="comment-dashboard",
+                    media_id="media-1",
+                    commenter_id="user-dashboard",
+                    commenter_username="tester",
+                    text="info please",
+                ),
+            )
+            counts = dashboard_counts(conn)
+
+        self.assertEqual(counts["automations"], 1)
+        self.assertEqual(counts["active_automations"], 1)
+        self.assertEqual(counts["media"], 1)
+        self.assertEqual(counts["comments"], 1)
+        self.assertEqual(counts["jobs_queued"], 1)
 if __name__ == "__main__":
     unittest.main()

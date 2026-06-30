@@ -26,6 +26,18 @@
         <p class="status warn">Instagram 미연결</p>
       {% endif %}
       <p class="note">비밀번호는 저장하지 않습니다. Meta OAuth로 발급된 access token만 암호화해 로컬 DB에 저장합니다.</p>
+      <div class="status-grid">
+        <div><span>활성 자동화</span><strong>{{ counts.active_automations or 0 }}</strong></div>
+        <div><span>불러온 게시물</span><strong>{{ counts.media or 0 }}</strong></div>
+        <div><span>대기 job</span><strong>{{ counts.jobs_queued or 0 }}</strong></div>
+        <div><span>처리 실패</span><strong>{{ counts.jobs_failed or 0 }}</strong></div>
+      </div>
+      <ul class="check-list">
+        <li class="{{ 'ok' if config_status.admin_auth else 'warn' }}">관리자 인증 {{ '설정됨' if config_status.admin_auth else '미설정' }}</li>
+        <li class="{{ 'ok' if config_status.meta_app_id else 'warn' }}">META_APP_ID {{ '설정됨' if config_status.meta_app_id else '미설정' }}</li>
+        <li class="{{ 'ok' if config_status.meta_app_secret else 'warn' }}">META_APP_SECRET {{ '설정됨' if config_status.meta_app_secret else '미설정' }}</li>
+        <li class="{{ 'ok' if config_status.meta_verify_token else 'warn' }}">META_VERIFY_TOKEN {{ '설정됨' if config_status.meta_verify_token else '미설정' }}</li>
+      </ul>
     </section>
 
     <section class="panel editor">

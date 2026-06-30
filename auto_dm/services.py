@@ -315,3 +315,15 @@ def retry_job(conn: Connection, job_id: int, comment_id: int, attempts: int, err
         "UPDATE comments SET status = ?, error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (next_status, error[:500], comment_id),
     )
+
+def dashboard_counts(conn: Connection) -> dict[str, int]:
+    tables = {
+        "automations": "SELECT COUNT(*) FROM automations",
+        "active_automations": "SELECT COUNT(*) FROM automations WHERE active = 1",
+        "media": "SELECT COUNT(*) FROM instagram_media",
+        "comments": "SELECT COUNT(*) FROM comments",
+    }
+    counts = {name: int(conn.execute(sql).fetchone()[0]) for name, sql in tables.items()}
+    for row in conn.execute("SELECT status, COUNT(*) AS count FROM dm_jobs GROUP BY status"):
+        counts[f"jobs_{row['status']}"] = int(row["count"])
+    return counts
