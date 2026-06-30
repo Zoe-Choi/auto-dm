@@ -41,6 +41,8 @@ Copy-Item .env.example .env
 APP_BASE_URL=https://your-domain.example
 DATABASE_PATH=auto_dm.sqlite3
 SESSION_SECRET=change-me
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=<sha256 hash>
 META_APP_ID=...
 META_APP_SECRET=...
 META_REDIRECT_URI=https://your-domain.example/auth/instagram/callback
@@ -82,3 +84,13 @@ ruff check .
 ## 게시물 선택 흐름
 
 Instagram 계정은 Facebook Page에 연결된 Instagram Business/Creator 계정이어야 합니다. OAuth callback은 연결된 Page의 `instagram_business_account`와 Page access token을 저장합니다. `게시물 불러오기`는 최근 media를 로컬 DB에 캐시하고, 화면에서 게시물별 키워드와 DM을 바로 등록할 수 있게 합니다.
+
+## 관리자 인증
+
+외부 URL로 운영할 때는 `.env`에 `ADMIN_PASSWORD_HASH`를 설정합니다. 값이 비어 있으면 로컬 개발용으로 인증을 건너뜁니다.
+
+```powershell
+python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_password('원하는 관리자 비밀번호'))"
+```
+
+출력된 hash를 `ADMIN_PASSWORD_HASH`에 넣습니다. 비밀번호 원문은 git에 올리지 않습니다.

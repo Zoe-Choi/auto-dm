@@ -18,6 +18,8 @@ class Settings:
     app_base_url: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
     database_path: str = os.getenv("DATABASE_PATH", "auto_dm.sqlite3")
     session_secret: str = os.getenv("SESSION_SECRET", "dev-secret")
+    admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password_hash: str = os.getenv("ADMIN_PASSWORD_HASH", "")
     meta_app_id: str = os.getenv("META_APP_ID", "")
     meta_app_secret: str = os.getenv("META_APP_SECRET", "")
     meta_redirect_uri: str = os.getenv(
@@ -32,4 +34,3 @@ class Settings:
 
 
 settings = Settings()
-

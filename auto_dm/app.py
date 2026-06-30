@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
+from .admin import valid_admin_credentials
 from .config import settings
 from .db import connect, init_db
 from .instagram import InstagramClient, MetaConfigError
@@ -24,6 +26,26 @@ from .services import (
 app = FastAPI(title="Auto DM")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+basic_auth = HTTPBasic(auto_error=False)
+
+
+def require_admin(credentials: HTTPBasicCredentials | None = Depends(basic_auth)) -> None:
+    if not settings.admin_password_hash:
+        return
+    if not credentials or not valid_admin_credentials(
+        credentials.username,
+        credentials.password,
+        expected_username=settings.admin_username,
+        expected_password_hash=settings.admin_password_hash,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Admin authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+admin_dependencies = [Depends(require_admin)]
 
 
 @app.on_event("startup")
@@ -31,7 +53,7 @@ def startup() -> None:
     init_db()
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, dependencies=admin_dependencies)
 def index(request: Request) -> HTMLResponse:
     with connect() as conn:
         automations = list_automations(conn)
@@ -52,7 +74,7 @@ def index(request: Request) -> HTMLResponse:
     )
 
 
-@app.post("/automations")
+@app.post("/automations", dependencies=admin_dependencies)
 def create_automation(
     instagram_media_id: str = Form(...),
     title: str = Form(...),
@@ -74,7 +96,7 @@ def create_automation(
     return RedirectResponse("/", status_code=303)
 
 
-@app.post("/automations/{automation_id}")
+@app.post("/automations/{automation_id}", dependencies=admin_dependencies)
 def update_automation(
     automation_id: int,
     instagram_media_id: str = Form(...),
@@ -98,14 +120,14 @@ def update_automation(
     return RedirectResponse("/", status_code=303)
 
 
-@app.post("/automations/{automation_id}/delete")
+@app.post("/automations/{automation_id}/delete", dependencies=admin_dependencies)
 def remove_automation(automation_id: int) -> RedirectResponse:
     with connect() as conn:
         delete_automation(conn, automation_id)
     return RedirectResponse("/", status_code=303)
 
 
-@app.post("/automations/{automation_id}/toggle")
+@app.post("/automations/{automation_id}/toggle", dependencies=admin_dependencies)
 def toggle_automation(automation_id: int) -> RedirectResponse:
     with connect() as conn:
         conn.execute(
@@ -119,14 +141,14 @@ def toggle_automation(automation_id: int) -> RedirectResponse:
     return RedirectResponse("/", status_code=303)
 
 
-@app.post("/comments/{comment_id}/confirm-follow")
+@app.post("/comments/{comment_id}/confirm-follow", dependencies=admin_dependencies)
 def confirm_follow(comment_id: int) -> RedirectResponse:
     with connect() as conn:
         mark_follow_confirmed(conn, comment_id)
     return RedirectResponse("/", status_code=303)
 
 
-@app.get("/auth/instagram")
+@app.get("/auth/instagram", dependencies=admin_dependencies)
 def instagram_auth() -> RedirectResponse:
     try:
         return RedirectResponse(InstagramClient().auth_url())
@@ -134,7 +156,7 @@ def instagram_auth() -> RedirectResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/auth/instagram/callback")
+@app.get("/auth/instagram/callback", dependencies=admin_dependencies)
 async def instagram_callback(code: str) -> RedirectResponse:
     client = InstagramClient()
     token = await client.exchange_code(code)
@@ -170,7 +192,7 @@ async def instagram_callback(code: str) -> RedirectResponse:
     return RedirectResponse("/", status_code=303)
 
 
-@app.post("/media/sync")
+@app.post("/media/sync", dependencies=admin_dependencies)
 async def sync_media() -> RedirectResponse:
     with connect() as conn:
         account = conn.execute(

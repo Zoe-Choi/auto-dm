@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from auto_dm.admin import hash_admin_password, valid_admin_credentials
 from auto_dm.db import connect, init_db
 from auto_dm.services import (
     IncomingComment,
@@ -208,5 +209,33 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(media[0]["caption"], "updated caption")
 
 
+
+    def test_admin_credentials_check_hash(self) -> None:
+        password_hash = hash_admin_password("secret")
+
+        self.assertTrue(
+            valid_admin_credentials(
+                "admin",
+                "secret",
+                expected_username="admin",
+                expected_password_hash=password_hash,
+            )
+        )
+        self.assertFalse(
+            valid_admin_credentials(
+                "admin",
+                "wrong",
+                expected_username="admin",
+                expected_password_hash=password_hash,
+            )
+        )
+        self.assertFalse(
+            valid_admin_credentials(
+                "other",
+                "secret",
+                expected_username="admin",
+                expected_password_hash=password_hash,
+            )
+        )
 if __name__ == "__main__":
     unittest.main()
