@@ -3,7 +3,13 @@ from __future__ import annotations
 from .db import connect
 from .instagram import InstagramClient
 from .security import unprotect_secret
-from .services import claim_jobs, mark_job_sent, mark_job_waiting_follow, reset_stale_processing_jobs, retry_job
+from .services import (
+    claim_jobs,
+    mark_job_sent,
+    mark_job_waiting_follow,
+    reset_stale_processing_jobs,
+    retry_job,
+)
 
 FOLLOW_PROMPT = "Please follow this account and leave the keyword comment again. We will send the DM after confirmation."
 

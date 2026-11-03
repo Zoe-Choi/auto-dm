@@ -4,9 +4,9 @@ import json
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from .admin import valid_admin_credentials
 from .config import settings
@@ -226,7 +226,6 @@ async def sync_media() -> RedirectResponse:
         account = conn.execute(
             "SELECT * FROM instagram_accounts ORDER BY updated_at DESC, id DESC LIMIT 1"
         ).fetchone()
-        counts = dashboard_counts(conn)
     if not account:
         return RedirectResponse("/", status_code=303)
 
