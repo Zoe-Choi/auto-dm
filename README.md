@@ -9,6 +9,7 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 - DM 발송 후 댓글에 `DM 확인해 주세요!` 또는 `DM 전송 완료!` 랜덤 답글
 - 최근 Instagram 게시물 불러오기와 게시물별 자동화 추가
 - 게시물 자동화 삭제와 ON/OFF 전환
+- 게시물별 `팔로워에게만 발송` 옵션, 공식 API 팔로우 확인
 - Instagram OAuth 연결 진입점
 - Instagram Webhook 검증과 댓글 수신 엔드포인트
 - 댓글 ID 기준 중복 처리 방지
@@ -17,9 +18,21 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 - 실패 작업 backoff 재시도
 - PC와 모바일 폭에 맞춘 관리 화면
 
-## 공식 API 제약
+## 팔로우 확인 흐름
 
-Meta 공식 API로는 댓글 작성자의 팔로우 여부를 확인할 수 없습니다. 팔로우 조건 없이 키워드가 맞으면 바로 DM을 보냅니다.
+`팔로워에게만 발송`이 켜진 게시물 동작:
+
+1. 키워드 댓글에 첫 DM 발송: `DM 받기` 버튼 포함, 댓글 공개 답글
+2. 사용자가 버튼 클릭 또는 DM 답장: Webhook `messages` 수신, job 재대기
+3. User Profile API `is_user_follow_business` 조회
+4. 팔로우 중이면 설정된 DM 발송
+5. 미팔로우면 프로필 링크와 `팔로우했어요` 버튼 발송, 클릭 시 3번부터 반복
+
+- 댓글당 private reply는 1회만 허용, 이후 DM은 사용자 응답 후 24시간 안에만 발송
+- 팔로우 여부는 사용자가 DM을 보내거나 버튼을 누른 뒤에만 조회 가능
+- 프로필 링크는 프로필 열기만 함, 팔로우/언팔로우 토글 아님
+- 첫 DM의 quick reply 버튼 표시 여부는 실계정 확인 필요
+- 옵션을 끄면 첫 DM으로 설정된 DM 바로 발송
 
 ## 설정 화면
 
@@ -66,7 +79,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 1. Meta Developers에서 App을 생성합니다.
 2. Instagram Graph API와 Webhooks 제품을 설정합니다.
 3. OAuth redirect URI에 `META_REDIRECT_URI` 값을 등록합니다.
-4. Webhook callback URL을 `APP_BASE_URL/webhooks/instagram`으로 등록합니다.
+4. Webhook callback URL을 `APP_BASE_URL/webhooks/instagram`으로 등록하고 `comments`, `messages` 필드를 구독합니다.
 5. Verify token은 `.env`의 `META_VERIFY_TOKEN`과 같은 값으로 입력합니다.
 6. 필요한 권한은 `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`, `pages_show_list`, `pages_read_engagement`입니다.
 7. 앱 검수와 권한 승인이 끝난 뒤 `/auth/instagram`에서 연결합니다.

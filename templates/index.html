@@ -33,6 +33,10 @@
         이 DM을 보냅니다
         <textarea name="dm_message" required rows="3" placeholder="요청하신 정보를 보내드립니다.">{{ item.dm_message if item else '' }}</textarea>
       </label>
+      <label class="check">
+        <input type="checkbox" name="follow_required" {% if not item or item.follow_required %}checked{% endif %}>
+        팔로워에게만 발송 (팔로우 안 했으면 팔로우 안내 후 확인)
+      </label>
       <div class="form-foot">
         <label class="check"><input type="checkbox" name="active" {% if not item or item.active %}checked{% endif %}> 자동 DM 켜기</label>
         <button class="button primary" type="submit">{{ '저장' if item else '설정 추가' }}</button>
@@ -49,6 +53,8 @@
   {% set status_labels = {
     'queued': '발송 대기',
     'processing': '처리 중',
+    'waiting_click': '버튼 클릭 대기',
+    'waiting_follow': '팔로우 대기',
     'sent': '발송 완료',
     'failed': '실패',
     'ignored': '키워드 없음',
@@ -57,7 +63,7 @@
   <header class="topbar">
     <div>
       <h1>Auto DM</h1>
-      <p>댓글에 키워드가 있으면 DM을 보내고, 댓글에 "{{ comment_replies | join('" 또는 "') }}" 답글을 답니다.</p>
+      <p>키워드 댓글에 DM을 보내고 "{{ comment_replies | join('" 또는 "') }}" 답글을 답니다. 팔로우 필수면 팔로우 확인 후 발송합니다.</p>
     </div>
     <a class="button primary" href="/auth/instagram">{{ 'Instagram 다시 연결' if account else 'Instagram 연결' }}</a>
   </header>
@@ -179,6 +185,7 @@
         <div><span>켜진 자동화</span><strong>{{ counts.active_automations or 0 }}</strong></div>
         <div><span>불러온 게시물</span><strong>{{ counts.media or 0 }}</strong></div>
         <div><span>발송 대기</span><strong>{{ counts.jobs_queued or 0 }}</strong></div>
+        <div><span>버튼/팔로우 대기</span><strong>{{ counts.jobs_waiting or 0 }}</strong></div>
         <div><span>발송 완료</span><strong>{{ counts.jobs_sent or 0 }}</strong></div>
         <div><span>실패</span><strong>{{ counts.jobs_failed or 0 }}</strong></div>
         <form method="post" action="/jobs/requeue-failed" class="status-action"><button class="button" type="submit">실패 재시도</button></form>

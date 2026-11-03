@@ -8,6 +8,7 @@ from sqlite3 import Connection, IntegrityError, Row
 from uuid import uuid4
 
 MAX_ATTEMPTS = 5
+FOLLOW_CHECK_PAYLOAD = "AUTO_DM_CHECK:"
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ def upsert_automation(
     keyword: str,
     dm_message: str,
     active: bool,
+    follow_required: bool = True,
     automation_id: int | None = None,
 ) -> int:
     media_id = instagram_media_id.strip()
@@ -66,6 +68,7 @@ def upsert_automation(
         "title": title.strip() or media_id,
         "keyword": ", ".join(split_keywords(keyword)),
         "dm_message": dm_message.strip(),
+        "follow_required": int(follow_required),
         "active": int(active),
     }
     if automation_id:
@@ -76,6 +79,7 @@ def upsert_automation(
                 title = :title,
                 keyword = :keyword,
                 dm_message = :dm_message,
+                follow_required = :follow_required,
                 active = :active,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
@@ -87,14 +91,15 @@ def upsert_automation(
     conn.execute(
         """
         INSERT INTO automations (
-            instagram_media_id, title, keyword, dm_message, active
+            instagram_media_id, title, keyword, dm_message, follow_required, active
         ) VALUES (
-            :instagram_media_id, :title, :keyword, :dm_message, :active
+            :instagram_media_id, :title, :keyword, :dm_message, :follow_required, :active
         )
         ON CONFLICT(instagram_media_id) DO UPDATE SET
             title = excluded.title,
             keyword = excluded.keyword,
             dm_message = excluded.dm_message,
+            follow_required = excluded.follow_required,
             active = excluded.active,
             updated_at = CURRENT_TIMESTAMP
         """,
@@ -226,8 +231,8 @@ def next_jobs(conn: Connection, limit: int = 20) -> list[Row]:
     return list(
         conn.execute(
             """
-            SELECT j.*, c.instagram_comment_id, c.commenter_username, c.status AS comment_status,
-                   a.dm_message
+            SELECT j.*, c.instagram_comment_id, c.commenter_id, c.commenter_username,
+                   c.recipient_id, c.status AS comment_status, a.dm_message, a.follow_required
             FROM dm_jobs j
             JOIN comments c ON c.id = j.comment_id
             JOIN automations a ON a.id = c.automation_id
@@ -274,8 +279,8 @@ def claim_jobs(conn: Connection, limit: int = 20) -> list[Row]:
     return list(
         conn.execute(
             """
-            SELECT j.*, c.instagram_comment_id, c.commenter_username, c.status AS comment_status,
-                   a.dm_message
+            SELECT j.*, c.instagram_comment_id, c.commenter_id, c.commenter_username,
+                   c.recipient_id, c.status AS comment_status, a.dm_message, a.follow_required
             FROM dm_jobs j
             JOIN comments c ON c.id = j.comment_id
             JOIN automations a ON a.id = c.automation_id
@@ -307,6 +312,83 @@ def note_comment_error(conn: Connection, comment_id: int, error: str) -> None:
         "UPDATE comments SET error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         (error[:500], comment_id),
     )
+
+
+def mark_job_waiting(conn: Connection, job_id: int, comment_id: int, status: str) -> None:
+    """Park a job until the commenter taps a DM button. status: waiting_click | waiting_follow."""
+    conn.execute(
+        """
+        UPDATE dm_jobs
+        SET status = 'waiting', claim_token = '', last_error = '', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (job_id,),
+    )
+    conn.execute(
+        "UPDATE comments SET status = ?, error = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (status, comment_id),
+    )
+
+
+def follow_check_payload(comment_id: int) -> str:
+    return f"{FOLLOW_CHECK_PAYLOAD}{comment_id}"
+
+
+def request_follow_check(conn: Connection, comment_id: int, recipient_id: str) -> bool:
+    """Requeue a waiting job so the worker checks whether the commenter follows the account."""
+    cursor = conn.execute(
+        """
+        UPDATE dm_jobs
+        SET status = 'queued', step = 'check_follow', attempts = 0,
+            next_attempt_at = CURRENT_TIMESTAMP, claim_token = '', last_error = '',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE comment_id = ? AND status = 'waiting'
+        """,
+        (comment_id,),
+    )
+    if cursor.rowcount == 0:
+        return False
+    conn.execute(
+        """
+        UPDATE comments
+        SET recipient_id = ?, status = 'queued', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (recipient_id, comment_id),
+    )
+    return True
+
+
+def handle_message_event(conn: Connection, event: dict, business_id: str = "") -> bool:
+    """Handle one Instagram `messaging` webhook event. Returns True when a follow check is queued."""
+    sender_id = str((event.get("sender") or {}).get("id") or "")
+    message = event.get("message") or {}
+    postback = event.get("postback") or {}
+    if not sender_id or message.get("is_echo") or (business_id and sender_id == business_id):
+        return False
+
+    payload = str((message.get("quick_reply") or {}).get("payload") or postback.get("payload") or "")
+    if payload.startswith(FOLLOW_CHECK_PAYLOAD):
+        suffix = payload[len(FOLLOW_CHECK_PAYLOAD):]
+        if suffix.isdigit():
+            return request_follow_check(conn, int(suffix), sender_id)
+        return False
+
+    # Fallback for a typed reply: the latest waiting comment from the same sender.
+    row = conn.execute(
+        """
+        SELECT j.comment_id
+        FROM dm_jobs j
+        JOIN comments c ON c.id = j.comment_id
+        WHERE j.status = 'waiting' AND c.commenter_id = ?
+        ORDER BY j.id DESC
+        LIMIT 1
+        """,
+        (sender_id,),
+    ).fetchone()
+    if not row:
+        return False
+    return request_follow_check(conn, int(row["comment_id"]), sender_id)
 
 
 def requeue_failed_jobs(conn: Connection) -> int:

@@ -19,6 +19,7 @@ from .services import (
     create_oauth_state,
     dashboard_counts,
     delete_automation,
+    handle_message_event,
     list_automations,
     list_instagram_media,
     list_recent_comments,
@@ -101,6 +102,7 @@ def create_automation(
     title: str = Form(""),
     keyword: str = Form(...),
     dm_message: str = Form(...),
+    follow_required: str | None = Form(None),
     active: str | None = Form(None),
 ) -> RedirectResponse:
     with connect() as conn:
@@ -110,6 +112,7 @@ def create_automation(
             title=title,
             keyword=keyword,
             dm_message=dm_message,
+            follow_required=follow_required == "on",
             active=active == "on",
         )
     return RedirectResponse("/", status_code=303)
@@ -122,6 +125,7 @@ def update_automation(
     title: str = Form(""),
     keyword: str = Form(...),
     dm_message: str = Form(...),
+    follow_required: str | None = Form(None),
     active: str | None = Form(None),
 ) -> RedirectResponse:
     with connect() as conn:
@@ -132,6 +136,7 @@ def update_automation(
             title=title,
             keyword=keyword,
             dm_message=dm_message,
+            follow_required=follow_required == "on",
             active=active == "on",
         )
     return RedirectResponse("/", status_code=303)
@@ -237,6 +242,10 @@ async def instagram_webhook(request: Request) -> dict[str, str]:
 
     payload = json.loads(body or b"{}")
     for entry in payload.get("entry", []):
+        business_id = str(entry.get("id") or "")
+        for event in entry.get("messaging", []):
+            with connect() as conn:
+                handle_message_event(conn, event, business_id)
         for change in entry.get("changes", []):
             value = change.get("value", {})
             comment_id = str(value.get("id") or value.get("comment_id") or "")

@@ -83,19 +83,59 @@ class InstagramClient:
             response.raise_for_status()
             return response.json().get("data", [])
 
-    async def send_private_reply(
-        self, comment_id: str, message: str, access_token: str
-    ) -> dict[str, Any]:
+    async def _send(self, recipient: dict[str, str], message: dict[str, Any], token: str) -> dict:
         import httpx
 
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
-                f"{self.base_url}/{comment_id}/private_replies",
-                params={"access_token": access_token},
-                json={"message": message},
+                f"{self.base_url}/me/messages",
+                params={"access_token": token},
+                json={"recipient": recipient, "message": message},
             )
             response.raise_for_status()
             return response.json()
+
+    @staticmethod
+    def _message(text: str, quick_replies: list[dict[str, str]] | None) -> dict[str, Any]:
+        message: dict[str, Any] = {"text": text}
+        if quick_replies:
+            message["quick_replies"] = quick_replies
+        return message
+
+    async def send_private_reply(
+        self,
+        comment_id: str,
+        message: str,
+        access_token: str,
+        quick_replies: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """The one DM allowed per comment; the user must respond before follow-up messages."""
+        return await self._send(
+            {"comment_id": comment_id}, self._message(message, quick_replies), access_token
+        )
+
+    async def send_message(
+        self,
+        recipient_id: str,
+        message: str,
+        access_token: str,
+        quick_replies: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        return await self._send(
+            {"id": recipient_id}, self._message(message, quick_replies), access_token
+        )
+
+    async def is_user_following(self, recipient_id: str, access_token: str) -> bool:
+        """Needs the user's consent, which is set once they message or tap a button."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"{self.base_url}/{recipient_id}",
+                params={"access_token": access_token, "fields": "is_user_follow_business"},
+            )
+            response.raise_for_status()
+            return bool(response.json().get("is_user_follow_business"))
 
     async def reply_to_comment(
         self, comment_id: str, message: str, access_token: str

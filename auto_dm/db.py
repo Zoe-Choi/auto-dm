@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS automations (
     title TEXT NOT NULL,
     keyword TEXT NOT NULL,
     dm_message TEXT NOT NULL,
+    follow_required INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS comments (
     instagram_media_id TEXT NOT NULL,
     commenter_id TEXT NOT NULL,
     commenter_username TEXT NOT NULL DEFAULT '',
+    recipient_id TEXT NOT NULL DEFAULT '',
     text TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued',
     error TEXT NOT NULL DEFAULT '',
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS dm_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     comment_id INTEGER NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'queued',
+    step TEXT NOT NULL DEFAULT 'first',
     attempts INTEGER NOT NULL DEFAULT 0,
     next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     claim_token TEXT NOT NULL DEFAULT '',
@@ -81,6 +84,7 @@ CREATE TABLE IF NOT EXISTS dm_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
+CREATE INDEX IF NOT EXISTS idx_comments_commenter ON comments(commenter_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status_next ON dm_jobs(status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_claim_token ON dm_jobs(claim_token);
 CREATE INDEX IF NOT EXISTS idx_automations_active_media ON automations(active, instagram_media_id);
@@ -93,6 +97,9 @@ MIGRATIONS = [
     "ALTER TABLE instagram_accounts ADD COLUMN page_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE instagram_accounts ADD COLUMN page_access_token TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE instagram_media ADD COLUMN media_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE automations ADD COLUMN follow_required INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE comments ADD COLUMN recipient_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE dm_jobs ADD COLUMN step TEXT NOT NULL DEFAULT 'first'",
 ]
 
 
