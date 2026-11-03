@@ -102,6 +102,24 @@ MIGRATIONS = [
     "ALTER TABLE dm_jobs ADD COLUMN step TEXT NOT NULL DEFAULT 'first'",
 ]
 
+# Jobs left in pre-API follow statuses already used their one private reply on the comment.
+# Park them as 'waiting' so the commenter's next DM triggers the API follow check.
+# Only legacy job statuses match, so re-running init_db is a no-op.
+LEGACY_STATUS_MIGRATIONS = [
+    """
+    UPDATE comments
+    SET status = 'waiting_follow', error = '', updated_at = CURRENT_TIMESTAMP
+    WHERE id IN (
+        SELECT comment_id FROM dm_jobs WHERE status IN ('waiting_follow', 'ready_to_send')
+    )
+    """,
+    """
+    UPDATE dm_jobs
+    SET status = 'waiting', claim_token = '', updated_at = CURRENT_TIMESTAMP
+    WHERE status IN ('waiting_follow', 'ready_to_send')
+    """,
+]
+
 
 @contextmanager
 def connect(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
@@ -125,3 +143,5 @@ def init_db(db_path: Path | None = None) -> None:
             except sqlite3.OperationalError as exc:
                 if "duplicate column name" not in str(exc).lower():
                     raise
+        for sql in LEGACY_STATUS_MIGRATIONS:
+            conn.execute(sql)

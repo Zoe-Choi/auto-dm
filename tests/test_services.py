@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 import tempfile
 import unittest
 from functools import partial
@@ -529,6 +530,67 @@ class ServiceTests(unittest.TestCase):
             self.assertTrue(handle_message_event(conn, typed, "ig-1"))
 
         self.assertEqual(self.comment_state(comment["id"])["step"], "check_follow")
+
+    def test_worker_continues_when_recording_reply_error_fails(self) -> None:
+        with connect(self.db_path) as conn:
+            first = self.seed_job(conn)
+            second = record_comment(
+                conn,
+                IncomingComment(
+                    comment_id="worker-comment-2",
+                    media_id="media-1",
+                    commenter_id="user-x",
+                    commenter_username="tester2",
+                    text="info please",
+                ),
+            )
+
+        with patch(
+            "auto_dm.worker.note_comment_error",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            processed = self.run_worker(FakeClient(fail_reply=True))
+
+        self.assertEqual(processed, 2)
+        for comment in (first, second):
+            self.assertEqual(self.comment_state(comment["id"])["status"], "sent")
+
+    def test_init_db_parks_legacy_follow_jobs_for_api_check(self) -> None:
+        with connect(self.db_path) as conn:
+            waiting = self.seed_job(conn, follow_required=True)
+            ready = record_comment(
+                conn,
+                IncomingComment(
+                    comment_id="legacy-ready",
+                    media_id="media-1",
+                    commenter_id="user-r",
+                    commenter_username="ready",
+                    text="info please",
+                ),
+            )
+            for comment, status in ((waiting, "waiting_follow"), (ready, "ready_to_send")):
+                conn.execute(
+                    "UPDATE dm_jobs SET status = ? WHERE comment_id = ?", (status, comment["id"])
+                )
+                conn.execute(
+                    "UPDATE comments SET status = ? WHERE id = ?", (status, comment["id"])
+                )
+
+        init_db(self.db_path)
+        init_db(self.db_path)
+
+        for comment in (waiting, ready):
+            state = self.comment_state(comment["id"])
+            self.assertEqual(state["status"], "waiting")
+            self.assertEqual(state["comment_status"], "waiting_follow")
+
+        client = FakeClient(follows=True)
+        self.assertEqual(self.run_worker(client), 0)
+        self.assertTrue(self.click(ready["id"], sender="user-r"))
+        self.run_worker(client)
+        self.assertEqual(client.messages[-1][:2], ("user-r", "here is the link"))
+        self.assertEqual(client.dms, [])
+        self.assertEqual(self.comment_state(ready["id"])["status"], "sent")
 
     def test_follow_check_failure_keeps_step_for_retry(self) -> None:
         with connect(self.db_path) as conn:

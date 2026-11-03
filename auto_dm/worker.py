@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import random
+import sqlite3
 from sqlite3 import Connection, Row
 
 from .db import connect
@@ -15,6 +17,8 @@ from .services import (
     reset_stale_processing_jobs,
     retry_job,
 )
+
+logger = logging.getLogger(__name__)
 
 COMMENT_REPLIES = (
     "DM 확인해 주세요!",
@@ -105,5 +109,9 @@ async def process_jobs(*, limit: int = 20, client: InstagramClient | None = None
                     job["instagram_comment_id"], random.choice(COMMENT_REPLIES), access_token
                 )
             except Exception as exc:  # noqa: BLE001
-                note_comment_error(conn, job["comment_id"], f"댓글 답글 실패: {exc}")
+                try:
+                    note_comment_error(conn, job["comment_id"], f"댓글 답글 실패: {exc}")
+                except sqlite3.Error:
+                    # Keep the batch going so sent DMs are still committed.
+                    logger.exception("failed to record comment reply error: %s", job["comment_id"])
     return processed
