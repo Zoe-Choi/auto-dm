@@ -1,6 +1,9 @@
+import asyncio
 import tempfile
 import unittest
+from functools import partial
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from auto_dm.admin import hash_admin_password, valid_admin_credentials
@@ -17,8 +20,6 @@ from auto_dm.services import (
     keyword_matches,
     list_automations,
     list_instagram_media,
-    mark_follow_confirmed,
-    mark_job_waiting_follow,
     next_jobs,
     record_comment,
     requeue_failed_jobs,
@@ -28,6 +29,7 @@ from auto_dm.services import (
     upsert_instagram_media,
 )
 from auto_dm.webhook import meta_signature, valid_meta_signature
+from auto_dm.worker import COMMENT_REPLIES, process_jobs
 
 
 class ServiceTests(unittest.TestCase):
@@ -39,14 +41,13 @@ class ServiceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def add_automation(self, conn, *, follow_required=False):
+    def add_automation(self, conn):
         return upsert_automation(
             conn,
             instagram_media_id="media-1",
             title="reel",
             keyword="info",
             dm_message="here is the link",
-            follow_required=follow_required,
             active=True,
         )
 
@@ -107,13 +108,13 @@ class ServiceTests(unittest.TestCase):
 
     def test_delete_automation_removes_setting(self) -> None:
         with connect(self.db_path) as conn:
-            automation_id = self.add_automation(conn, follow_required=True)
+            automation_id = self.add_automation(conn)
             delete_automation(conn, automation_id)
             self.assertEqual(list_automations(conn), [])
 
     def test_update_automation_changes_keyword_and_message(self) -> None:
         with connect(self.db_path) as conn:
-            automation_id = self.add_automation(conn, follow_required=True)
+            automation_id = self.add_automation(conn)
             upsert_automation(
                 conn,
                 automation_id=automation_id,
@@ -121,7 +122,6 @@ class ServiceTests(unittest.TestCase):
                 title="photo",
                 keyword="price",
                 dm_message="price list",
-                follow_required=False,
                 active=False,
             )
             item = list_automations(conn)[0]
@@ -130,30 +130,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(item["title"], "photo")
         self.assertEqual(item["keyword"], "price")
         self.assertEqual(item["dm_message"], "price list")
-        self.assertEqual(item["follow_required"], 0)
         self.assertEqual(item["active"], 0)
-
-    def test_mark_follow_confirmed_requeues_final_dm(self) -> None:
-        with connect(self.db_path) as conn:
-            self.add_automation(conn, follow_required=True)
-            comment = record_comment(
-                conn,
-                IncomingComment(
-                    comment_id="comment-3",
-                    media_id="media-1",
-                    commenter_id="user-3",
-                    commenter_username="tester",
-                    text="info please",
-                ),
-            )
-            job = next_jobs(conn)[0]
-            mark_job_waiting_follow(conn, job["id"], comment["id"])
-            changed = mark_follow_confirmed(conn, comment["id"])
-            ready_job = next_jobs(conn)[0]
-
-        self.assertTrue(changed)
-        self.assertEqual(ready_job["status"], "ready_to_send")
-        self.assertEqual(ready_job["dm_message"], "here is the link")
 
     def test_claim_jobs_prevents_reclaiming_same_batch(self) -> None:
         with connect(self.db_path) as conn:
@@ -366,14 +343,13 @@ class ServiceTests(unittest.TestCase):
 
     def test_create_automation_with_same_media_updates_existing_row(self) -> None:
         with connect(self.db_path) as conn:
-            first_id = self.add_automation(conn, follow_required=True)
+            first_id = self.add_automation(conn)
             second_id = upsert_automation(
                 conn,
                 instagram_media_id="media-1",
                 title="updated reel",
                 keyword="price",
                 dm_message="updated message",
-                follow_required=False,
                 active=False,
             )
             rows = list_automations(conn)
@@ -383,7 +359,120 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(rows[0]["title"], "updated reel")
         self.assertEqual(rows[0]["keyword"], "price")
         self.assertEqual(rows[0]["dm_message"], "updated message")
-        self.assertEqual(rows[0]["follow_required"], 0)
         self.assertEqual(rows[0]["active"], 0)
+
+    def test_keyword_matches_any_comma_separated_keyword(self) -> None:
+        self.assertTrue(keyword_matches("정보, 링크", "링크 주세요"))
+        self.assertTrue(keyword_matches("정보,링크", "정보요"))
+        self.assertFalse(keyword_matches("정보, 링크", "가격 문의"))
+        self.assertFalse(keyword_matches(" , ", "anything"))
+
+    def test_upsert_automation_normalizes_keywords_and_default_title(self) -> None:
+        with connect(self.db_path) as conn:
+            upsert_automation(
+                conn,
+                instagram_media_id="media-9",
+                title="",
+                keyword=" 정보 ,, 링크 ",
+                dm_message="msg",
+                active=True,
+            )
+            item = list_automations(conn)[0]
+
+        self.assertEqual(item["keyword"], "정보, 링크")
+        self.assertEqual(item["title"], "media-9")
+
+    def run_worker(self, client) -> int:
+        with patch("auto_dm.worker.connect", partial(connect, self.db_path)):
+            return asyncio.run(process_jobs(client=client))
+
+    def seed_job(self, conn, comment_id="worker-comment"):
+        conn.execute(
+            "INSERT INTO instagram_accounts (instagram_user_id, username, access_token) "
+            "VALUES ('ig-1', 'shop', 'token-1')"
+        )
+        self.add_automation(conn)
+        return record_comment(
+            conn,
+            IncomingComment(
+                comment_id=comment_id,
+                media_id="media-1",
+                commenter_id="user-w",
+                commenter_username="tester",
+                text="info please",
+            ),
+        )
+
+    def test_worker_sends_dm_then_replies_to_comment(self) -> None:
+        client = FakeClient()
+        with connect(self.db_path) as conn:
+            comment = self.seed_job(conn)
+
+        processed = self.run_worker(client)
+
+        with connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT status, error FROM comments WHERE id = ?", (comment["id"],)
+            ).fetchone()
+        self.assertEqual(processed, 1)
+        self.assertEqual(client.dms, [("worker-comment", "here is the link", "token-1")])
+        self.assertEqual(len(client.replies), 1)
+        self.assertIn(client.replies[0][1], COMMENT_REPLIES)
+        self.assertEqual(row["status"], "sent")
+        self.assertEqual(row["error"], "")
+
+    def test_worker_keeps_dm_sent_when_comment_reply_fails(self) -> None:
+        client = FakeClient(fail_reply=True)
+        with connect(self.db_path) as conn:
+            comment = self.seed_job(conn)
+
+        self.run_worker(client)
+
+        with connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT j.status, c.status AS comment_status, c.error "
+                "FROM dm_jobs j JOIN comments c ON c.id = j.comment_id WHERE c.id = ?",
+                (comment["id"],),
+            ).fetchone()
+        self.assertEqual(row["status"], "sent")
+        self.assertEqual(row["comment_status"], "sent")
+        self.assertIn("댓글 답글 실패", row["error"])
+
+    def test_worker_retries_when_dm_fails_without_reply(self) -> None:
+        client = FakeClient(fail_dm=True)
+        with connect(self.db_path) as conn:
+            comment = self.seed_job(conn)
+
+        self.run_worker(client)
+
+        with connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT status, attempts FROM dm_jobs WHERE comment_id = ?", (comment["id"],)
+            ).fetchone()
+        self.assertEqual(row["status"], "queued")
+        self.assertEqual(row["attempts"], 1)
+        self.assertEqual(client.replies, [])
+
+
+class FakeClient:
+    def __init__(self, *, fail_dm: bool = False, fail_reply: bool = False) -> None:
+        self.fail_dm = fail_dm
+        self.fail_reply = fail_reply
+        self.dms: list[tuple[str, str, str]] = []
+        self.replies: list[tuple[str, str, str]] = []
+
+    async def send_private_reply(self, comment_id: str, message: str, token: str) -> dict:
+        if self.fail_dm:
+            raise RuntimeError("dm failed")
+        self.dms.append((comment_id, message, token))
+        return {}
+
+    async def reply_to_comment(self, comment_id: str, message: str, token: str) -> dict:
+        if self.fail_reply:
+            raise RuntimeError("reply failed")
+        self.replies.append((comment_id, message, token))
+        return {}
+
+
 if __name__ == "__main__":
     unittest.main()

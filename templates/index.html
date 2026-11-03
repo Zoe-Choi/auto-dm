@@ -7,149 +7,134 @@
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+  {% macro rule_form(action, media_id='', title='', item=none, manual=false) %}
+    <form method="post" action="{{ action }}" class="rule-form">
+      {% if manual %}
+        <div class="form-grid">
+          <label>
+            게시물 media id
+            <input name="instagram_media_id" required value="{{ media_id }}" placeholder="17900000000000000">
+          </label>
+          <label>
+            관리 이름
+            <input name="title" value="{{ title }}" placeholder="비워두면 media id 사용">
+          </label>
+        </div>
+      {% else %}
+        <input type="hidden" name="instagram_media_id" value="{{ media_id }}">
+        <input type="hidden" name="title" value="{{ title }}">
+      {% endif %}
+      <label>
+        댓글에 이 단어가 있으면
+        <input name="keyword" required value="{{ item.keyword if item else '' }}" placeholder="정보, 링크">
+        <small>쉼표로 여러 개 입력. 하나라도 포함되면 발송. 대소문자 구분 없음</small>
+      </label>
+      <label>
+        이 DM을 보냅니다
+        <textarea name="dm_message" required rows="3" placeholder="요청하신 정보를 보내드립니다.">{{ item.dm_message if item else '' }}</textarea>
+      </label>
+      <div class="form-foot">
+        <label class="check"><input type="checkbox" name="active" {% if not item or item.active %}checked{% endif %}> 자동 DM 켜기</label>
+        <button class="button primary" type="submit">{{ '저장' if item else '설정 추가' }}</button>
+      </div>
+    </form>
+  {% endmacro %}
+
+  {% macro delete_form(item) %}
+    <form method="post" action="/automations/{{ item.id }}/delete" onsubmit="return confirm('이 게시물의 자동 DM 설정을 삭제할까요?')">
+      <button class="button danger small" type="submit">설정 삭제</button>
+    </form>
+  {% endmacro %}
+
+  {% set status_labels = {
+    'queued': '발송 대기',
+    'processing': '처리 중',
+    'sent': '발송 완료',
+    'failed': '실패',
+    'ignored': '키워드 없음',
+  } %}
+
   <header class="topbar">
     <div>
       <h1>Auto DM</h1>
-      <p>Instagram 댓글 키워드별 DM 자동화</p>
+      <p>댓글에 키워드가 있으면 DM을 보내고, 댓글에 "{{ comment_replies | join('" 또는 "') }}" 답글을 답니다.</p>
     </div>
-    <a class="button primary" href="/auth/instagram">Instagram 연결</a>
+    <a class="button primary" href="/auth/instagram">{{ 'Instagram 다시 연결' if account else 'Instagram 연결' }}</a>
   </header>
 
   <main class="layout">
-    <section class="panel setup">
+    <section class="panel">
       <div class="section-head">
-        <h2>연결 상태</h2>
-      </div>
-      {% if account %}
-        <p class="status ok">{{ account.username }} 연결됨</p>
-      {% else %}
-        <p class="status warn">Instagram 미연결</p>
-      {% endif %}
-      <p class="note">비밀번호는 저장하지 않습니다. Meta OAuth로 발급된 access token만 암호화해 로컬 DB에 저장합니다.</p>
-      <div class="status-grid">
-        <div><span>활성 자동화</span><strong>{{ counts.active_automations or 0 }}</strong></div>
-        <div><span>불러온 게시물</span><strong>{{ counts.media or 0 }}</strong></div>
-        <div><span>대기 job</span><strong>{{ counts.jobs_queued or 0 }}</strong></div>
-        <div><span>처리 실패</span><strong>{{ counts.jobs_failed or 0 }}</strong></div>
-        <form method="post" action="/jobs/requeue-failed" class="status-action"><button class="button" type="submit">실패 재시도</button></form>
-      </div>
-      <ul class="check-list">
-        <li class="{{ 'ok' if config_status.admin_auth else 'warn' }}">관리자 인증 {{ '설정됨' if config_status.admin_auth else '미설정' }}</li>
-        <li class="{{ 'ok' if config_status.meta_app_id else 'warn' }}">META_APP_ID {{ '설정됨' if config_status.meta_app_id else '미설정' }}</li>
-        <li class="{{ 'ok' if config_status.meta_app_secret else 'warn' }}">META_APP_SECRET {{ '설정됨' if config_status.meta_app_secret else '미설정' }}</li>
-        <li class="{{ 'ok' if config_status.meta_verify_token else 'warn' }}">META_VERIFY_TOKEN {{ '설정됨' if config_status.meta_verify_token else '미설정' }}</li>
-      </ul>
-    </section>
-
-    <section class="panel editor">
-      <div class="section-head">
-        <h2>게시물 자동화 직접 추가</h2>
-      </div>
-      <form method="post" action="/automations" class="form-grid">
-        <label>
-          게시물 media id
-          <input name="instagram_media_id" required placeholder="17900000000000000">
-        </label>
-        <label>
-          관리 이름
-          <input name="title" required placeholder="6월 이벤트 릴스">
-        </label>
-        <label>
-          댓글 키워드
-          <input name="keyword" required placeholder="정보">
-        </label>
-        <label class="wide">
-          발송 DM
-          <textarea name="dm_message" required rows="5" placeholder="요청하신 정보를 보내드립니다."></textarea>
-        </label>
-        <label class="check"><input type="checkbox" name="follow_required" checked> 팔로워에게만 최종 DM 발송</label>
-        <label class="check"><input type="checkbox" name="active" checked> 자동 DM 켜기</label>
-        <button class="button primary wide" type="submit">추가</button>
-      </form>
-    </section>
-
-    <section class="panel wide-panel">
-      <div class="section-head">
-        <h2>최근 Instagram 게시물</h2>
+        <div>
+          <h2>게시물별 자동 DM 설정</h2>
+          <p class="note">게시물을 고르고 키워드와 DM 내용만 입력하면 됩니다.</p>
+        </div>
         <form method="post" action="/media/sync"><button class="button" type="submit">게시물 불러오기</button></form>
       </div>
       <div class="media-grid">
         {% for media in media_items %}
-          <article class="media-card">
-            <div class="media-meta">
-              <span class="pill neutral">{{ media.media_type or 'MEDIA' }}</span>
-              <a href="{{ media.permalink }}" target="_blank" rel="noreferrer">게시물 열기</a>
+          {% set item = automation_by_media.get(media.instagram_media_id) %}
+          {% set thumb = media.thumbnail_url or (media.media_url if media.media_type != 'VIDEO' else '') %}
+          <article class="media-card {{ 'configured' if item else '' }}">
+            <div class="media-head">
+              {% if thumb %}
+                <img class="thumb" src="{{ thumb }}" alt="" loading="lazy">
+              {% else %}
+                <div class="thumb placeholder">{{ media.media_type or 'MEDIA' }}</div>
+              {% endif %}
+              <div class="media-info">
+                <div class="media-meta">
+                  {% if item %}
+                    <span class="pill {{ 'on' if item.active else 'off' }}">{{ '켜짐' if item.active else '꺼짐' }}</span>
+                  {% else %}
+                    <span class="pill neutral">미설정</span>
+                  {% endif %}
+                  {% if media.permalink %}<a href="{{ media.permalink }}" target="_blank" rel="noreferrer">게시물 열기</a>{% endif %}
+                </div>
+                <p class="caption">{{ media.caption or media.instagram_media_id }}</p>
+              </div>
             </div>
-            <p class="caption">{{ media.caption or media.instagram_media_id }}</p>
-            <form method="post" action="/automations" class="form-grid compact">
-              <input type="hidden" name="instagram_media_id" value="{{ media.instagram_media_id }}">
-              <label>
-                관리 이름
-                <input name="title" required value="{{ (media.caption or media.instagram_media_id)[:40] }}">
-              </label>
-              <label>
-                댓글 키워드
-                <input name="keyword" required placeholder="정보">
-              </label>
-              <label class="wide">
-                발송 DM
-                <textarea name="dm_message" required rows="3" placeholder="요청하신 정보를 보내드립니다."></textarea>
-              </label>
-              <label class="check"><input type="checkbox" name="follow_required" checked> 팔로워에게만 최종 DM 발송</label>
-              <label class="check"><input type="checkbox" name="active" checked> 자동 DM 켜기</label>
-              <button class="button primary wide" type="submit">이 게시물 추가</button>
-            </form>
+            {% if item %}
+              {{ rule_form('/automations/' ~ item.id, media.instagram_media_id, item.title, item) }}
+              <div class="card-actions">{{ delete_form(item) }}</div>
+            {% else %}
+              {{ rule_form('/automations', media.instagram_media_id, (media.caption or media.instagram_media_id)[:40]) }}
+            {% endif %}
           </article>
         {% else %}
-          <p class="empty">불러온 게시물이 없습니다.</p>
+          <p class="empty">아직 불러온 게시물이 없습니다. Instagram을 연결한 뒤 "게시물 불러오기"를 누르세요.</p>
         {% endfor %}
       </div>
     </section>
 
-    <section class="panel wide-panel">
+    <section class="panel">
       <div class="section-head">
-        <h2>자동 DM 게시물</h2>
+        <div>
+          <h2>목록에 없는 게시물</h2>
+          <p class="note">최근 게시물 목록에 없는 게시물은 media id로 직접 설정합니다.</p>
+        </div>
       </div>
-      <div class="automation-list">
-        {% for item in automations %}
-          <article class="automation-card">
-            <form method="post" action="/automations/{{ item.id }}" class="form-grid compact">
-              <div class="card-title">
-                <span class="pill {{ 'on' if item.active else 'off' }}">{{ 'ON' if item.active else 'OFF' }}</span>
+      {% if other_automations %}
+        <div class="media-grid">
+          {% for item in other_automations %}
+            <article class="media-card configured">
+              <div class="media-meta">
+                <span class="pill {{ 'on' if item.active else 'off' }}">{{ '켜짐' if item.active else '꺼짐' }}</span>
                 <strong>{{ item.title }}</strong>
               </div>
-              <label>
-                게시물 media id
-                <input name="instagram_media_id" required value="{{ item.instagram_media_id }}">
-              </label>
-              <label>
-                관리 이름
-                <input name="title" required value="{{ item.title }}">
-              </label>
-              <label>
-                댓글 키워드
-                <input name="keyword" required value="{{ item.keyword }}">
-              </label>
-              <label class="wide">
-                발송 DM
-                <textarea name="dm_message" required rows="4">{{ item.dm_message }}</textarea>
-              </label>
-              <label class="check"><input type="checkbox" name="follow_required" {% if item.follow_required %}checked{% endif %}> 팔로워에게만 최종 DM 발송</label>
-              <label class="check"><input type="checkbox" name="active" {% if item.active %}checked{% endif %}> 자동 DM 켜기</label>
-              <button class="button primary wide" type="submit">저장</button>
-            </form>
-            <div class="actions">
-              <form method="post" action="/automations/{{ item.id }}/toggle"><button class="button" type="submit">ON/OFF</button></form>
-              <form method="post" action="/automations/{{ item.id }}/delete"><button class="button danger" type="submit">삭제</button></form>
-            </div>
-          </article>
-        {% else %}
-          <p class="empty">등록된 게시물이 없습니다.</p>
-        {% endfor %}
-      </div>
+              {{ rule_form('/automations/' ~ item.id, item.instagram_media_id, item.title, item, true) }}
+              <div class="card-actions">{{ delete_form(item) }}</div>
+            </article>
+          {% endfor %}
+        </div>
+      {% endif %}
+      <details class="manual-add">
+        <summary>media id로 직접 추가</summary>
+        {{ rule_form('/automations', manual=true) }}
+      </details>
     </section>
 
-    <section class="panel wide-panel">
+    <section class="panel">
       <div class="section-head">
         <h2>최근 댓글 처리</h2>
       </div>
@@ -158,37 +143,53 @@
           <thead>
             <tr>
               <th>상태</th>
-              <th>자동화</th>
+              <th>게시물</th>
               <th>작성자</th>
               <th>댓글</th>
-              <th>오류</th>
-              <th>작업</th>
+              <th>메모</th>
             </tr>
           </thead>
           <tbody>
           {% for item in comments %}
             <tr>
-              <td><span class="pill neutral">{{ item.status }}</span></td>
+              <td><span class="pill {{ 'on' if item.status == 'sent' else ('danger' if item.status == 'failed' else 'neutral') }}">{{ status_labels.get(item.status, item.status) }}</span></td>
               <td>{{ item.automation_title or '-' }}</td>
               <td>{{ item.commenter_username or item.commenter_id }}</td>
               <td>{{ item.text }}</td>
               <td>{{ item.error }}</td>
-              <td>
-                {% if item.status == 'waiting_follow' %}
-                  <form method="post" action="/comments/{{ item.id }}/confirm-follow">
-                    <button class="button" type="submit">팔로우 확인</button>
-                  </form>
-                {% else %}
-                  -
-                {% endif %}
-              </td>
             </tr>
           {% else %}
-            <tr><td colspan="6" class="empty">처리된 댓글이 없습니다.</td></tr>
+            <tr><td colspan="5" class="empty">처리된 댓글이 없습니다.</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>운영 상태</h2>
+        {% if account %}
+          <p class="status ok">{{ account.username }} 연결됨</p>
+        {% else %}
+          <p class="status warn">Instagram 미연결</p>
+        {% endif %}
+      </div>
+      <div class="status-grid">
+        <div><span>켜진 자동화</span><strong>{{ counts.active_automations or 0 }}</strong></div>
+        <div><span>불러온 게시물</span><strong>{{ counts.media or 0 }}</strong></div>
+        <div><span>발송 대기</span><strong>{{ counts.jobs_queued or 0 }}</strong></div>
+        <div><span>발송 완료</span><strong>{{ counts.jobs_sent or 0 }}</strong></div>
+        <div><span>실패</span><strong>{{ counts.jobs_failed or 0 }}</strong></div>
+        <form method="post" action="/jobs/requeue-failed" class="status-action"><button class="button" type="submit">실패 재시도</button></form>
+      </div>
+      <ul class="check-list">
+        <li class="{{ 'ok' if config_status.admin_auth else 'warn' }}">관리자 인증 {{ '설정됨' if config_status.admin_auth else '미설정' }}</li>
+        <li class="{{ 'ok' if config_status.meta_app_id else 'warn' }}">META_APP_ID {{ '설정됨' if config_status.meta_app_id else '미설정' }}</li>
+        <li class="{{ 'ok' if config_status.meta_app_secret else 'warn' }}">META_APP_SECRET {{ '설정됨' if config_status.meta_app_secret else '미설정' }}</li>
+        <li class="{{ 'ok' if config_status.meta_verify_token else 'warn' }}">META_VERIFY_TOKEN {{ '설정됨' if config_status.meta_verify_token else '미설정' }}</li>
+      </ul>
+      <p class="note">비밀번호는 저장하지 않습니다. Meta OAuth로 발급된 access token만 암호화해 로컬 DB에 저장합니다.</p>
     </section>
   </main>
 </body>

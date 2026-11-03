@@ -76,7 +76,7 @@ class InstagramClient:
                 f"{self.base_url}/{instagram_user_id}/media",
                 params={
                     "access_token": access_token,
-                    "fields": "id,caption,media_type,permalink,thumbnail_url,timestamp",
+                    "fields": "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp",
                     "limit": 50,
                 },
             )
@@ -93,6 +93,19 @@ class InstagramClient:
                 f"{self.base_url}/{comment_id}/private_replies",
                 params={"access_token": access_token},
                 json={"message": message},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def reply_to_comment(
+        self, comment_id: str, message: str, access_token: str
+    ) -> dict[str, Any]:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                f"{self.base_url}/{comment_id}/replies",
+                params={"access_token": access_token, "message": message},
             )
             response.raise_for_status()
             return response.json()

@@ -22,13 +22,13 @@ from .services import (
     list_automations,
     list_instagram_media,
     list_recent_comments,
-    mark_follow_confirmed,
     record_comment,
     requeue_failed_jobs,
     upsert_automation,
     upsert_instagram_media,
 )
 from .webhook import valid_meta_signature
+from .worker import COMMENT_REPLIES
 
 app = FastAPI(title="Auto DM")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -70,11 +70,16 @@ def index(request: Request) -> HTMLResponse:
             "SELECT * FROM instagram_accounts ORDER BY updated_at DESC, id DESC LIMIT 1"
         ).fetchone()
         counts = dashboard_counts(conn)
+    media_ids = {media["instagram_media_id"] for media in media_items}
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "automations": automations,
+            "automation_by_media": {a["instagram_media_id"]: a for a in automations},
+            "other_automations": [
+                a for a in automations if a["instagram_media_id"] not in media_ids
+            ],
+            "comment_replies": COMMENT_REPLIES,
             "media_items": media_items,
             "comments": comments,
             "account": account,
@@ -93,10 +98,9 @@ def index(request: Request) -> HTMLResponse:
 @app.post("/automations", dependencies=admin_dependencies)
 def create_automation(
     instagram_media_id: str = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     keyword: str = Form(...),
     dm_message: str = Form(...),
-    follow_required: str | None = Form(None),
     active: str | None = Form(None),
 ) -> RedirectResponse:
     with connect() as conn:
@@ -106,7 +110,6 @@ def create_automation(
             title=title,
             keyword=keyword,
             dm_message=dm_message,
-            follow_required=follow_required == "on",
             active=active == "on",
         )
     return RedirectResponse("/", status_code=303)
@@ -116,10 +119,9 @@ def create_automation(
 def update_automation(
     automation_id: int,
     instagram_media_id: str = Form(...),
-    title: str = Form(...),
+    title: str = Form(""),
     keyword: str = Form(...),
     dm_message: str = Form(...),
-    follow_required: str | None = Form(None),
     active: str | None = Form(None),
 ) -> RedirectResponse:
     with connect() as conn:
@@ -130,7 +132,6 @@ def update_automation(
             title=title,
             keyword=keyword,
             dm_message=dm_message,
-            follow_required=follow_required == "on",
             active=active == "on",
         )
     return RedirectResponse("/", status_code=303)
@@ -141,28 +142,6 @@ def remove_automation(automation_id: int) -> RedirectResponse:
     with connect() as conn:
         delete_automation(conn, automation_id)
     return RedirectResponse("/", status_code=303)
-
-
-@app.post("/automations/{automation_id}/toggle", dependencies=admin_dependencies)
-def toggle_automation(automation_id: int) -> RedirectResponse:
-    with connect() as conn:
-        conn.execute(
-            """
-            UPDATE automations
-            SET active = CASE active WHEN 1 THEN 0 ELSE 1 END, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (automation_id,),
-        )
-    return RedirectResponse("/", status_code=303)
-
-
-@app.post("/comments/{comment_id}/confirm-follow", dependencies=admin_dependencies)
-def confirm_follow(comment_id: int) -> RedirectResponse:
-    with connect() as conn:
-        mark_follow_confirmed(conn, comment_id)
-    return RedirectResponse("/", status_code=303)
-
 
 
 @app.post("/jobs/requeue-failed", dependencies=admin_dependencies)

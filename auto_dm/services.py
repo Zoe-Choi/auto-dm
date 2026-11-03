@@ -23,11 +23,13 @@ def normalize_keyword(value: str) -> str:
     return value.strip().casefold()
 
 
+def split_keywords(value: str) -> list[str]:
+    return [k for k in (normalize_keyword(part) for part in value.split(",")) if k]
+
+
 def keyword_matches(keyword: str, text: str) -> bool:
-    normalized = normalize_keyword(keyword)
-    if not normalized:
-        return False
-    return normalized in text.casefold()
+    lowered = text.casefold()
+    return any(k in lowered for k in split_keywords(keyword))
 
 
 def _oauth_state_hash(state: str) -> str:
@@ -55,16 +57,15 @@ def upsert_automation(
     title: str,
     keyword: str,
     dm_message: str,
-    follow_required: bool,
     active: bool,
     automation_id: int | None = None,
 ) -> int:
+    media_id = instagram_media_id.strip()
     values = {
-        "instagram_media_id": instagram_media_id.strip(),
-        "title": title.strip(),
-        "keyword": keyword.strip(),
+        "instagram_media_id": media_id,
+        "title": title.strip() or media_id,
+        "keyword": ", ".join(split_keywords(keyword)),
         "dm_message": dm_message.strip(),
-        "follow_required": int(follow_required),
         "active": int(active),
     }
     if automation_id:
@@ -75,7 +76,6 @@ def upsert_automation(
                 title = :title,
                 keyword = :keyword,
                 dm_message = :dm_message,
-                follow_required = :follow_required,
                 active = :active,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
@@ -87,15 +87,14 @@ def upsert_automation(
     conn.execute(
         """
         INSERT INTO automations (
-            instagram_media_id, title, keyword, dm_message, follow_required, active
+            instagram_media_id, title, keyword, dm_message, active
         ) VALUES (
-            :instagram_media_id, :title, :keyword, :dm_message, :follow_required, :active
+            :instagram_media_id, :title, :keyword, :dm_message, :active
         )
         ON CONFLICT(instagram_media_id) DO UPDATE SET
             title = excluded.title,
             keyword = excluded.keyword,
             dm_message = excluded.dm_message,
-            follow_required = excluded.follow_required,
             active = excluded.active,
             updated_at = CURRENT_TIMESTAMP
         """,
@@ -120,12 +119,14 @@ def upsert_instagram_media(conn: Connection, media_items: list[dict]) -> int:
         conn.execute(
             """
             INSERT INTO instagram_media (
-                instagram_media_id, caption, media_type, permalink, thumbnail_url, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                instagram_media_id, caption, media_type, permalink, media_url, thumbnail_url,
+                timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(instagram_media_id) DO UPDATE SET
                 caption = excluded.caption,
                 media_type = excluded.media_type,
                 permalink = excluded.permalink,
+                media_url = excluded.media_url,
                 thumbnail_url = excluded.thumbnail_url,
                 timestamp = excluded.timestamp,
                 updated_at = CURRENT_TIMESTAMP
@@ -135,6 +136,7 @@ def upsert_instagram_media(conn: Connection, media_items: list[dict]) -> int:
                 str(item.get("caption") or ""),
                 str(item.get("media_type") or ""),
                 str(item.get("permalink") or ""),
+                str(item.get("media_url") or ""),
                 str(item.get("thumbnail_url") or ""),
                 str(item.get("timestamp") or ""),
             ),
@@ -225,11 +227,11 @@ def next_jobs(conn: Connection, limit: int = 20) -> list[Row]:
         conn.execute(
             """
             SELECT j.*, c.instagram_comment_id, c.commenter_username, c.status AS comment_status,
-                   a.dm_message, a.follow_required
+                   a.dm_message
             FROM dm_jobs j
             JOIN comments c ON c.id = j.comment_id
             JOIN automations a ON a.id = c.automation_id
-            WHERE j.status IN ('queued', 'ready_to_send')
+            WHERE j.status = 'queued'
               AND j.next_attempt_at <= CURRENT_TIMESTAMP
             ORDER BY j.created_at ASC, j.id ASC
             LIMIT ?
@@ -261,7 +263,7 @@ def claim_jobs(conn: Connection, limit: int = 20) -> list[Row]:
         WHERE id IN (
             SELECT id
             FROM dm_jobs
-            WHERE status IN ('queued', 'ready_to_send')
+            WHERE status = 'queued'
               AND next_attempt_at <= CURRENT_TIMESTAMP
             ORDER BY created_at ASC, id ASC
             LIMIT ?
@@ -273,7 +275,7 @@ def claim_jobs(conn: Connection, limit: int = 20) -> list[Row]:
         conn.execute(
             """
             SELECT j.*, c.instagram_comment_id, c.commenter_username, c.status AS comment_status,
-                   a.dm_message, a.follow_required
+                   a.dm_message
             FROM dm_jobs j
             JOIN comments c ON c.id = j.comment_id
             JOIN automations a ON a.id = c.automation_id
@@ -300,49 +302,11 @@ def mark_job_sent(conn: Connection, job_id: int, comment_id: int) -> None:
     )
 
 
-def mark_job_waiting_follow(conn: Connection, job_id: int, comment_id: int) -> None:
+def note_comment_error(conn: Connection, comment_id: int, error: str) -> None:
     conn.execute(
-        """
-        UPDATE dm_jobs
-        SET status = 'waiting_follow', claim_token = '', updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        """,
-        (job_id,),
+        "UPDATE comments SET error = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (error[:500], comment_id),
     )
-    conn.execute(
-        """
-        UPDATE comments
-        SET status = 'waiting_follow', error = 'Follower verification requires manual confirmation',
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        """,
-        (comment_id,),
-    )
-
-
-def mark_follow_confirmed(conn: Connection, comment_id: int) -> bool:
-    cursor = conn.execute(
-        """
-        UPDATE dm_jobs
-        SET status = 'ready_to_send', next_attempt_at = CURRENT_TIMESTAMP,
-            claim_token = '', last_error = '', updated_at = CURRENT_TIMESTAMP
-        WHERE comment_id = ? AND status = 'waiting_follow'
-        """,
-        (comment_id,),
-    )
-    if cursor.rowcount == 0:
-        return False
-    conn.execute(
-        """
-        UPDATE comments
-        SET status = 'ready_to_send', error = '', updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        """,
-        (comment_id,),
-    )
-    return True
-
-
 
 
 def requeue_failed_jobs(conn: Connection) -> int:

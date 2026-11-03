@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS instagram_media (
     caption TEXT NOT NULL DEFAULT '',
     media_type TEXT NOT NULL DEFAULT '',
     permalink TEXT NOT NULL DEFAULT '',
+    media_url TEXT NOT NULL DEFAULT '',
     thumbnail_url TEXT NOT NULL DEFAULT '',
     timestamp TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -46,7 +47,6 @@ CREATE TABLE IF NOT EXISTS automations (
     title TEXT NOT NULL,
     keyword TEXT NOT NULL,
     dm_message TEXT NOT NULL,
-    follow_required INTEGER NOT NULL DEFAULT 1,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -92,6 +92,7 @@ MIGRATIONS = [
     "ALTER TABLE dm_jobs ADD COLUMN claim_token TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE instagram_accounts ADD COLUMN page_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE instagram_accounts ADD COLUMN page_access_token TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE instagram_media ADD COLUMN media_url TEXT NOT NULL DEFAULT ''",
 ]
 
 
