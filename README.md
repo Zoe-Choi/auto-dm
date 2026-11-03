@@ -41,6 +41,38 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 - 최근 목록에 없는 게시물은 `media id로 직접 추가`
 - 댓글 답글 실패는 DM 재발송 없이 `최근 댓글 처리` 메모에만 기록
 
+## 운영 전 체크리스트
+
+준비
+- [ ] Instagram 계정을 Business 또는 Creator로 전환하고 Facebook Page에 연결
+- [ ] 외부 HTTPS 주소 확보: ngrok 같은 터널 또는 서버
+- [ ] `.env` 작성: `APP_BASE_URL`, `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_VERIFY_TOKEN`, `SESSION_SECRET`
+- [ ] 관리자 비밀번호 hash 생성 후 `ADMIN_PASSWORD_HASH` 입력
+
+Meta 앱 설정
+- [ ] Meta Developers에서 App 생성, Instagram Graph API와 Webhooks 추가
+- [ ] OAuth redirect URI에 `META_REDIRECT_URI` 등록
+- [ ] Webhook URL `APP_BASE_URL/webhooks/instagram`, verify token 등록
+- [ ] Webhook `comments`, `messages` 필드 구독
+- [ ] 권한 승인: `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`, `pages_show_list`, `pages_read_engagement`
+- [ ] 앱 검수 전에는 테스터로 등록한 계정만 동작하므로 테스트 계정 등록
+
+실행과 연결
+- [ ] `run-web.ps1`, `run-worker.ps1` 각각 실행, 운영 중 계속 켜두기
+- [ ] 관리 화면에서 `Instagram 연결`, `게시물 불러오기`
+- [ ] 운영 상태 패널의 설정 항목 모두 `설정됨` 확인
+
+실계정 테스트
+- [ ] 팔로우 필수 끈 게시물: 키워드 댓글에 DM과 공개 답글 도착
+- [ ] 키워드 없는 댓글: `키워드 없음`으로 기록, DM 미발송
+- [ ] 팔로우 필수 켠 게시물: 첫 DM에 `DM 받기` 버튼 표시 여부
+- [ ] 버튼이 안 보이면 아무 DM 답장으로 진행되는지 확인
+- [ ] 이미 팔로우한 계정: 버튼 클릭 후 설정 DM 바로 도착
+- [ ] 팔로우 안 한 계정: 팔로우 안내 도착, 팔로우 후 `팔로우했어요` 클릭 시 DM 도착
+- [ ] 팔로우 직후 조회 반영 지연 여부
+- [ ] 첫 DM 후 24시간 지나 버튼 클릭 시 동작
+- [ ] 실패 건이 `최근 댓글 처리`에 표시되고 `실패 재시도` 동작
+
 ## 설치
 
 ```powershell
