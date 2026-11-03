@@ -37,8 +37,9 @@ h2 { font-size: 18px; }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 16px;
+  max-width: 1280px;
+  margin: 0 auto;
   padding: 16px clamp(16px, 4vw, 40px) 40px;
 }
 
@@ -136,13 +137,13 @@ th { color: var(--muted); font-size: 13px; font-weight: 700; }
   .button { width: 100%; }
   table { min-width: 640px; }
 }
-.media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
 .media-card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 12px; }
 .media-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .media-meta a { color: var(--primary); text-decoration: none; font-size: 14px; }
 .caption { color: var(--text); line-height: 1.4; max-height: 4.2em; overflow: hidden; }
 @media (max-width: 760px) { .media-grid { grid-template-columns: 1fr; } }
-.status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .status-grid div { border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
 .status-grid span { display: block; color: var(--muted); font-size: 12px; }
 .status-grid strong { display: block; margin-top: 4px; font-size: 20px; }
@@ -154,3 +155,22 @@ th { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 .status-action { grid-column: 1 / -1; }
 .status-action .button { width: 100%; }
+
+.media-card.configured { border-color: var(--primary); }
+.media-head { display: flex; gap: 12px; align-items: flex-start; }
+.media-info { display: grid; gap: 8px; min-width: 0; flex: 1; }
+.thumb { width: 88px; height: 88px; flex: none; border-radius: 6px; object-fit: cover; background: #eef1f5; }
+.thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 11px; font-weight: 700; }
+.rule-form { display: grid; gap: 10px; }
+.rule-form small { color: var(--muted); font-size: 12px; }
+.form-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.card-actions { display: flex; justify-content: flex-end; }
+.card-actions form { margin: 0; }
+.button.small { min-height: 32px; padding: 5px 10px; font-size: 13px; }
+.pill.danger { color: var(--danger); background: #fee4e2; }
+.manual-add { margin-top: 12px; border: 1px dashed var(--line); border-radius: 8px; padding: 12px 14px; }
+.manual-add summary { cursor: pointer; font-weight: 700; }
+.manual-add[open] summary { margin-bottom: 12px; }
+@media (max-width: 760px) {
+  .card-actions .button, .form-foot .button { width: 100%; }
+}
