@@ -36,14 +36,16 @@ Instagram 게시물 댓글에 특정 키워드가 포함되면 DM을 보내기 �
 
 ## 설정 화면
 
-- `게시물 불러오기` 후 게시물 카드에서 키워드와 DM 입력, `설정 추가`
-- 설정된 카드는 파란 테두리와 `켜짐`/`꺼짐` 표시, 같은 카드에서 수정과 삭제
-- 최근 목록에 없는 게시물은 `media id로 직접 추가`
-- 댓글 답글 실패는 DM 재발송 없이 `최근 댓글 처리` 메모에만 기록
+- 상단: 연결된 계정 또는 `Instagram 연결` 버튼, Meta 설정이 없으면 준비 안내
+- `게시물`: `불러오기` 후 게시물 줄을 눌러 키워드, DM, `팔로워에게만`, `사용` 설정
+- 목록에 없는 게시물은 `게시물 ID로 직접 추가`
+- `최근 댓글`: 처리 상태와 오류, 실패가 있을 때만 재시도 버튼
+- 모바일 폭에서 큰 터치 영역과 16px 입력창
 
 ## 운영 전 체크리스트
 
 준비
+- [x] Rust, MinGW-w64 설치 후 `cargo test` 전체 통과 확인
 - [ ] Instagram 계정을 Business 또는 Creator로 전환하고 Facebook Page에 연결
 - [ ] 외부 HTTPS 주소 확보: ngrok 같은 터널 또는 서버
 - [ ] `.env` 작성: `APP_BASE_URL`, `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_VERIFY_TOKEN`, `SESSION_SECRET`
@@ -60,7 +62,7 @@ Meta 앱 설정
 실행과 연결
 - [ ] `run-web.ps1`, `run-worker.ps1` 각각 실행, 운영 중 계속 켜두기
 - [ ] 관리 화면에서 `Instagram 연결`, `게시물 불러오기`
-- [ ] 운영 상태 패널의 설정 항목 모두 `설정됨` 확인
+- [ ] 상단에 연결 계정 표시, 준비 안내 사라짐 확인
 
 실계정 테스트
 - [ ] 팔로우 필수 끈 게시물: 키워드 댓글에 DM과 공개 답글 도착
@@ -71,26 +73,36 @@ Meta 앱 설정
 - [ ] 팔로우 안 한 계정: 팔로우 안내 도착, 팔로우 후 `팔로우했어요` 클릭 시 DM 도착
 - [ ] 팔로우 직후 조회 반영 지연 여부
 - [ ] 첫 DM 후 24시간 지나 버튼 클릭 시 동작
-- [ ] 실패 건이 `최근 댓글 처리`에 표시되고 `실패 재시도` 동작
+- [ ] 실패 건이 `최근 댓글`에 표시되고 재시도 버튼 동작
 
 ## 설치
 
+Rust 버전이 기본입니다. Python 버전 `auto_dm/`은 삭제 결정 전까지 참고용으로 유지합니다. 두 버전은 같은 DB와 `.env`를 사용합니다.
+
+1. Rust 설치: `rustup-init.exe`를 받아 아래 옵션으로 실행
+
 ```powershell
-cd "D:\2. Projects\auto-dm"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+.\rustup-init.exe -y --default-host x86_64-pc-windows-gnu
+```
+
+2. MinGW-w64 설치: WinLibs `x86_64 posix seh ucrt` zip을 `%USERPROFILE%\tools`에 압축 해제
+3. 실행 스크립트가 `%USERPROFILE%\.cargo\bin`, `%USERPROFILE%\tools\mingw64\bin`을 자동으로 PATH에 추가. `cargo`를 직접 쓸 때는 두 폴더를 사용자 PATH에 추가
+4. `.env` 생성
+
+```powershell
 Copy-Item .env.example .env
 ```
 
-`.env`에 Meta App 정보를 설정합니다. 비밀번호는 넣지 않습니다.
+- MinGW 필요 이유: `rusqlite`의 SQLite C 소스 빌드, `windows-sys`의 import library 생성에 `gcc`, `as` 필요
+- 관리자 권한 없는 설치 방식, Visual Studio Build Tools 불필요
+
+`.env` 항목:
 
 ```text
 APP_BASE_URL=https://your-domain.example
 DATABASE_PATH=auto_dm.sqlite3
-SESSION_SECRET=change-me
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=<sha256 hash>
+ADMIN_PASSWORD_HASH=SHA256_HASH
 META_APP_ID=...
 META_APP_SECRET=...
 META_REDIRECT_URI=https://your-domain.example/auth/instagram/callback
@@ -100,11 +112,33 @@ META_GRAPH_VERSION=v20.0
 
 ## 실행
 
+웹과 worker를 각각 다른 터미널에서 실행합니다. 첫 실행은 빌드 때문에 몇 분 소요됩니다.
+
 ```powershell
-uvicorn main:app --host 127.0.0.1 --port 8000
+powershell -ExecutionPolicy Bypass -File .\scripts\run-web.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\run-worker.ps1
 ```
 
-회사 PC에서 포트 접근이 막히면 서버 실행 검증은 생략하고 테스트만 실행합니다.
+- 관리 화면: `http://127.0.0.1:8000`
+- 직접 실행: `cargo run --release -- web`, `cargo run --release -- worker`
+- 기타 명령: `init-db`, `process-once`, `hash-password`
+
+## Rust 코드 구조
+
+| 파일 | 역할 | Python 대응 |
+|---|---|---|
+| `src/main.rs` | CLI 명령 | `cli.py` |
+| `src/web.rs` | axum 웹 서버, 관리자 인증 | `app.py` |
+| `src/worker.rs` | DM 발송, 팔로우 확인 | `worker.py` |
+| `src/services.rs` | DB 작업 | `services.py` |
+| `src/db.rs` | 스키마, migration | `db.py` |
+| `src/instagram.rs` | Graph API 호출 | `instagram.py` |
+| `src/security.rs` | DPAPI 토큰 암호화, `unsafe` 사용 | `security.py` |
+| `src/webhook.rs` | Webhook 서명, payload 처리 | `webhook.py` |
+| `src/admin.rs` | 비밀번호 hash | `admin.py` |
+
+- 템플릿 `templates/index.html`은 Python Jinja2와 Rust minijinja 공용
+- Graph API 오류 메시지에서 access token 포함 URL 제거
 
 ## Meta 설정
 
@@ -121,13 +155,16 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 ## 테스트
 
 ```powershell
-pytest
-ruff check .
+cargo test
+cargo clippy --all-targets
+cargo fmt --check
 ```
+
+- CI: GitHub Actions에서 Python, Rust 테스트 모두 실행
 
 ## Git 보안
 
-`.env`, SQLite DB, virtualenv, IDE 설정은 commit하지 않습니다.
+`.env`, SQLite DB, virtualenv, `target/`, IDE 설정은 commit하지 않습니다.
 
 ## 게시물 선택 흐름
 
@@ -138,7 +175,7 @@ Instagram 계정은 Facebook Page에 연결된 Instagram Business/Creator 계정
 외부 URL로 운영할 때는 `.env`에 `ADMIN_PASSWORD_HASH`를 설정합니다. 값이 비어 있으면 로컬 개발용으로 인증을 건너뜁니다.
 
 ```powershell
-python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_password('원하는 관리자 비밀번호'))"
+powershell -ExecutionPolicy Bypass -File .\scripts\hash-admin-password.ps1 -Password "원하는 관리자 비밀번호"
 ```
 
 출력된 hash를 `ADMIN_PASSWORD_HASH`에 넣습니다. 비밀번호 원문은 git에 올리지 않습니다.
@@ -151,26 +188,6 @@ python -c "from auto_dm.admin import hash_admin_password; print(hash_admin_passw
 
 Instagram 연결 callback은 one-time `state` 값을 검증하고 재사용을 막습니다.
 
-## Windows 실행 스크립트
-
-집 PC에서는 repo를 pull한 뒤 `.env`를 만들고 아래 명령을 각각 다른 터미널에서 실행합니다.
-
-```powershell
-.\scripts\run-web.ps1
-.\scripts\run-worker.ps1
-```
-
-관리자 비밀번호 hash는 다음 명령으로 생성합니다.
-
-```powershell
-.\scripts\hash-admin-password.ps1 -Password "원하는 관리자 비밀번호"
-```
-
-## 운영 상태 패널
-
-첫 화면에서 관리자 인증, Meta 설정값 여부, Instagram 연결 상태, 활성 자동화 수, 게시물 캐시 수, DM job 상태를 확인할 수 있습니다. 값 자체는 노출하지 않고 설정 여부만 표시합니다.
-
-
 ## Queue 복구
 
 worker가 job 처리 중 종료되면 `processing` job이 남을 수 있습니다. worker는 새 batch를 claim하기 전에 15분 이상 멈춘 stale processing job을 다시 `queued`로 돌립니다.
@@ -178,7 +195,7 @@ worker가 job 처리 중 종료되면 `processing` job이 남을 수 있습니�
 
 ## 실패 job 재시도
 
-토큰/권한 문제를 해결한 뒤 관리 화면의 `실패 재시도` 버튼으로 `failed` job을 다시 `queued`로 돌릴 수 있습니다.
+토큰/권한 문제를 해결한 뒤 `최근 댓글`의 재시도 버튼으로 `failed` job을 다시 `queued`로 돌릴 수 있습니다.
 
 
 ## 중복 게시물 처리
